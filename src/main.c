@@ -23,6 +23,7 @@ light *lights = NULL;
 int lights_size = 0; // TODO size_t?
 
 int selected = 0;
+int windex = 0;
 
 struct buffer {
     char *data;
@@ -203,10 +204,8 @@ void draw_header() {
     }
 
     mvwprintw(wheader, 0, 0, "chue 0.0.1");
-    // mvwprintw(wheader, 1, 0, "lights %3d", lights_size);
-    // mvwprintw(wheader, 2, 0, "sindex %3d", selected);
-    // mvwprintw(wheader, 3, 0, "son      %d", lights[selected].on);
-    // mvwprintw(wheader, 1, 0, "time %ld", now);
+    mvwprintw(wheader, 1, 0, "selected index %3d+%d", selected, windex);
+    mvwprintw(wheader, 2, 0, "time %ld", now);
 
     mvwprintw(wheader, 0, (COLS - 17), "     _           ");
     mvwprintw(wheader, 1, (COLS - 17), " ___| |_ _ _ ___ ");
@@ -252,13 +251,15 @@ void draw_content() {
     for (int i = 0; (i < lights_size) && (i < (maxy - 3)); i++) {
         wmove(wcontent, (2 + i), 1);
 
+        light *l = &lights[i + windex];
+
         if (i == selected) {
             wattrset(wcontent, A_REVERSE);
             mvwhline(wcontent, (2 + i), 1, ' ', (maxx - 2));
-            wprintw(wcontent, "%-*s%-*s", header_width, lights[i].name, header_width, (lights[i].on ? "on" : "off"));
+            wprintw(wcontent, "%-*s%-*s", header_width, l->name, header_width, (l->on ? "on" : "off"));
             wattrset(wcontent, A_NORMAL);
         } else {
-            wprintw(wcontent, "%-*s%-*s", header_width, lights[i].name, header_width, (lights[i].on ? "on" : "off"));
+            wprintw(wcontent, "%-*s%-*s", header_width, l->name, header_width, (l->on ? "on" : "off"));
         }
     }
 
@@ -283,23 +284,39 @@ void loop() {
             case 'h':
                 break;
             case 'j':
-                if ((lights_size - 1) < 1) {
+                if (((getmaxy(wcontent) - 3) - 1) < 1) {
                     break;
                 }
-                if (selected < (lights_size - 1)) {
+
+                // TODO fix
+                if (selected >= ((getmaxy(wcontent) - 3) - 4) && ((selected + windex) < (lights_size - 4))) {
+                    windex++;
+                    break;
+                }
+
+                if (selected < ((getmaxy(wcontent) - 3) - 1)) {
                     selected++;
                 } else {
                     selected = 0;
+                    windex = 0;
                 }
                 break;
             case 'k':
-                if ((lights_size - 1) < 1) {
+                if (((getmaxy(wcontent) - 3) - 1) < 1) {
                     break;
                 }
+
+                // TODO fix
+                if ((selected + windex) <= 4 && (windex > 0)) {
+                    windex--;
+                    break;
+                }
+
                 if (selected > 0) {
                     selected--;
                 } else {
-                    selected = (lights_size - 1);
+                    selected = ((getmaxy(wcontent) - 3) - 1);
+                    windex = (getmaxy(wcontent) - 3) - selected;
                 }
                 break;
             case 'l':
