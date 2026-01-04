@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <cjson/cJSON.h>
 #include <curl/curl.h>
@@ -8,6 +9,9 @@
 
 #define BADDR "<bridge address>"
 #define BUSER "<bridge username>"
+
+time_t now = 0;
+time_t poll = 0;
 
 typedef struct light {
     char *id;
@@ -202,6 +206,7 @@ void draw_header() {
     // mvwprintw(wheader, 1, 0, "lights %3d", lights_size);
     // mvwprintw(wheader, 2, 0, "sindex %3d", selected);
     // mvwprintw(wheader, 3, 0, "son      %d", lights[selected].on);
+    // mvwprintw(wheader, 1, 0, "time %ld", now);
 
     mvwprintw(wheader, 0, (COLS - 17), "     _           ");
     mvwprintw(wheader, 1, (COLS - 17), " ___| |_ _ _ ___ ");
@@ -305,17 +310,25 @@ void loop() {
                 break;
             case KEY_RESIZE:
                 break;
+            case ERR:
+                break;
             default:
                 break;
         }
 
-        curl_hue_lights_read(); // TODO ui hangs
+        now = time(NULL);
+        if ((now - poll) > 1) {
+            curl_hue_lights_read(); // TODO ui hangs
+            poll = now;
+        }
+
         draw();
-    } while ((ch = getch()) != ERR);
+    } while ((ch = getch()));
 }
 
 int ncurses_init() {
     initscr();
+    timeout(50);
     raw();
     noecho();
     curs_set(0);
