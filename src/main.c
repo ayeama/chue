@@ -220,19 +220,23 @@ void draw_content() {
         wcontent = newwin(height, width, starty, startx);
     }
 
+    int maxy = getmaxy(wcontent);
+    int maxx = getmaxx(wcontent);
+
     /* title */
     //wattrset(wcontent, COLOR_PAIR(1));
     box(wcontent, 0, 0);
     //wattrset(wcontent, A_NORMAL);
 
     char title[COLS - 2];
-    sprintf(title, "%s(%s)[%d]", "lights", "all", 0);
-    mvwprintw(wcontent, 0, ((getmaxx(wcontent) - strlen(title)) / 2), " %s ", title);
+    int count = lights_size;
+    sprintf(title, "%s(%s)[%d]", "lights", "all", count);
+    mvwprintw(wcontent, 0, ((maxx - strlen(title)) / 2), " %s ", title);
 
     /* table header */
     char *header[] = {"NAME", "STATE"};
     int header_count = 2;
-    int header_width = (getmaxx(wcontent) - 2) / header_count;
+    int header_width = (maxx - 2) / header_count;
 
     wmove(wcontent, 1, 1);
     for (int i = 0; i < header_count; i++) {
@@ -240,12 +244,12 @@ void draw_content() {
     }
 
     /* table items */
-    for (int i = 0; i < lights_size; i++) {
+    for (int i = 0; (i < lights_size) && (i < (maxy - 3)); i++) {
         wmove(wcontent, (2 + i), 1);
 
         if (i == selected) {
             wattrset(wcontent, A_REVERSE);
-            mvwhline(wcontent, (2 + i), 1, ' ', (getmaxx(wcontent) - 2));
+            mvwhline(wcontent, (2 + i), 1, ' ', (maxx - 2));
             wprintw(wcontent, "%-*s%-*s", header_width, lights[i].name, header_width, (lights[i].on ? "on" : "off"));
             wattrset(wcontent, A_NORMAL);
         } else {
