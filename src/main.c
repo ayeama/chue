@@ -7,8 +7,8 @@
 #include <curl/curl.h>
 #include <ncurses.h>
 
-#define BADDR "<bridge address>"
-#define BUSER "<bridge username>"
+#define ESC 17
+
 
 time_t now = 0;
 time_t poll = 0;
@@ -204,7 +204,7 @@ void draw_header() {
     }
 
     mvwprintw(wheader, 0, 0, "chue 0.0.1");
-    mvwprintw(wheader, 1, 0, "selected index %3d+%d", selected, windex);
+    mvwprintw(wheader, 1, 0, "sindex %3d %3d", selected, windex); // TODO fix
     mvwprintw(wheader, 2, 0, "time %ld", now);
 
     mvwprintw(wheader, 0, (COLS - 17), "     _           ");
@@ -234,7 +234,8 @@ void draw_content() {
 
     char title[COLS - 2];
     int count = lights_size;
-    sprintf(title, "%s(%s)[%d]", "lights", "all", count);
+    // sprintf(title, "%s(%s)[%d]", "lights", "all", count);
+    sprintf(title, "%s[%d]", "lights", count);
     mvwprintw(wcontent, 0, ((maxx - strlen(title)) / 2), " %s ", title);
 
     /* table header */
@@ -279,11 +280,11 @@ void loop() {
     int ch = 0;
     do {
         switch (ch) {
-            case 'q':
+            case 'q': // quit
                 return;
             case 'h':
                 break;
-            case 'j':
+            case 'j': // down
                 if (((getmaxy(wcontent) - 3) - 1) < 1) {
                     break;
                 }
@@ -301,7 +302,7 @@ void loop() {
                     windex = 0;
                 }
                 break;
-            case 'k':
+            case 'k': // up
                 if (((getmaxy(wcontent) - 3) - 1) < 1) {
                     break;
                 }
@@ -321,11 +322,35 @@ void loop() {
                 break;
             case 'l':
                 break;
-            case ' ':
+            case ' ': // mark
                 lights[selected].on = !lights[selected].on;
                 curl_hue_light_toggle();
                 break;
-            case KEY_RESIZE:
+            case 'g': // top
+                selected = 0;
+                windex = 0;
+                break;
+            case 'G': // bottom
+                // TODO hardcoded
+                selected = 15;
+                windex = 1;
+                break;
+            case ':': // command
+                break;
+            case '/': // filter
+                break;
+            case ESC: // clear, cancel, back
+                break;
+            case KEY_RESIZE: // window resize
+                // TODO improve?
+                delwin(wheader);
+                wheader = NULL;
+                
+                delwin(wcontent);
+                wcontent = NULL;
+
+                selected = 0;
+                windex = 0;
                 break;
             case ERR:
                 break;
@@ -346,8 +371,10 @@ void loop() {
 int ncurses_init() {
     initscr();
     timeout(50);
-    raw();
+    // raw();
+    cbreak();
     noecho();
+    set_escdelay(25);
     curs_set(0);
 
     if (!has_colors()) {
