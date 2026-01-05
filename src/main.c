@@ -17,6 +17,7 @@ typedef struct light {
     char *id;
     char *name;
     bool on;
+    double brightness;
 } light;
 
 light *lights = NULL;
@@ -24,6 +25,7 @@ int lights_size = 0; // TODO size_t?
 
 int selected = 0;
 int windex = 0;
+int wsize = 0;
 
 struct buffer {
     char *data;
@@ -67,14 +69,14 @@ void curl_hue_lights_read() {
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 
     char url[1024] = {0};
-    snprintf(url, (1024 - 1), "https://%s/clip/v2/resource/light", BADDR);
+    snprintf(url, 1024, "https://%s/clip/v2/resource/light", BADDR);
     curl_easy_setopt(curl, CURLOPT_URL, url);
 
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "User-Agent: chue/0.0.1");
 
     char hauth[1024] = {0};
-    snprintf(hauth, (1024 - 1), "hue-application-key: %s", BUSER);
+    snprintf(hauth, 1024, "hue-application-key: %s", BUSER);
     headers = curl_slist_append(headers, hauth);
 
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -126,6 +128,12 @@ void curl_hue_lights_read() {
                     lights[i].on = onon->valueint;
                 }
 
+                cJSON *dimming = cJSON_GetObjectItem(item, "dimming");
+                cJSON *brightness = cJSON_GetObjectItem(dimming, "brightness");
+                if (cJSON_IsNumber(brightness)) {
+                    lights[i].brightness = brightness->valuedouble;
+                }
+
                 i++;
             }
         }
@@ -146,6 +154,8 @@ static size_t curl_hue_light_toggle_callback(void *buffer, size_t size, size_t n
 }
 
 void curl_hue_light_toggle() {
+    lights[selected].on = !lights[selected].on;
+
     /* curl request */
     CURL *curl = curl_easy_init();
     if (!curl) {
@@ -158,7 +168,7 @@ void curl_hue_light_toggle() {
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
 
     char url[1024] = {0};
-    snprintf(url, (1024 - 1), "https://%s/clip/v2/resource/light/%s", BADDR, lights[selected].id);
+    snprintf(url, 1024, "https://%s/clip/v2/resource/light/%s", BADDR, lights[selected].id);
     curl_easy_setopt(curl, CURLOPT_URL, url);
 
     struct curl_slist *headers = NULL;
@@ -166,7 +176,7 @@ void curl_hue_light_toggle() {
     headers = curl_slist_append(headers, "Content-Type: application/json");
     
     char hauth[1024] = {0};
-    snprintf(hauth, (1024 - 1), "hue-application-key: %s", BUSER);
+    snprintf(hauth, 1024, "hue-application-key: %s", BUSER);
     headers = curl_slist_append(headers, hauth);
 
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -204,8 +214,8 @@ void draw_header() {
     }
 
     mvwprintw(wheader, 0, 0, "chue 0.0.1");
-    mvwprintw(wheader, 1, 0, "sindex %3d %3d", selected, windex); // TODO fix
-    mvwprintw(wheader, 2, 0, "time %ld", now);
+    // mvwprintw(wheader, 1, 0, "win s%3d wi%3d ws%3d ls%3d", selected, windex, wsize, lights_size); // TODO fix
+    // mvwprintw(wheader, 2, 0, "time %ld", now);
 
     mvwprintw(wheader, 0, (COLS - 17), "     _           ");
     mvwprintw(wheader, 1, (COLS - 17), " ___| |_ _ _ ___ ");
@@ -222,9 +232,11 @@ void draw_content() {
         int height = LINES - 4 - 1;
         int width = COLS;
         wcontent = newwin(height, width, starty, startx);
+
+        wsize = getmaxy(wcontent) - 3;
     }
 
-    int maxy = getmaxy(wcontent);
+    // int maxy = getmaxy(wcontent);
     int maxx = getmaxx(wcontent);
 
     /* title */
@@ -239,9 +251,9 @@ void draw_content() {
     mvwprintw(wcontent, 0, ((maxx - strlen(title)) / 2), " %s ", title);
 
     /* table header */
-    char *header[] = {"NAME", "STATE"};
-    int header_count = 2;
-    int header_width = (maxx - 2) / header_count;
+    char *header[] = {"NAME", "STATE", "BRIGHTNESS"};
+    int header_count = 3;
+    int header_width = (maxx - 2) / header_count; // TODO handle remainders
 
     wmove(wcontent, 1, 1);
     for (int i = 0; i < header_count; i++) {
@@ -249,18 +261,18 @@ void draw_content() {
     }
 
     /* table items */
-    for (int i = 0; (i < lights_size) && (i < (maxy - 3)); i++) {
+    for (int i = 0; (i < lights_size) && (i < wsize); i++) {
         wmove(wcontent, (2 + i), 1);
 
         light *l = &lights[i + windex];
 
-        if (i == selected) {
+        if ((i + windex) == selected) {
             wattrset(wcontent, A_REVERSE);
             mvwhline(wcontent, (2 + i), 1, ' ', (maxx - 2));
-            wprintw(wcontent, "%-*s%-*s", header_width, l->name, header_width, (l->on ? "on" : "off"));
+            wprintw(wcontent, "%-*.*s%-*s%-*.0lf", header_width, (header_width - 1), l->name, header_width, (l->on ? "on" : "off"), header_width, l->brightness);
             wattrset(wcontent, A_NORMAL);
         } else {
-            wprintw(wcontent, "%-*s%-*s", header_width, l->name, header_width, (l->on ? "on" : "off"));
+            wprintw(wcontent, "%-*.*s%-*s%-*.0lf", header_width, (header_width - 1), l->name, header_width, (l->on ? "on" : "off"), header_width, l->brightness);
         }
     }
 
@@ -285,45 +297,45 @@ void loop() {
             case 'h':
                 break;
             case 'j': // down
-                if (((getmaxy(wcontent) - 3) - 1) < 1) {
-                    break;
-                }
-
-                // TODO fix
-                if (selected >= ((getmaxy(wcontent) - 3) - 4) && ((selected + windex) < (lights_size - 4))) {
+                if ((windex + wsize) < lights_size) {
+                    if (selected < (windex + wsize - 4)) {
+                        selected++;
+                    } else {
+                        selected++;
                     windex++;
-                    break;
-                }
-
-                if (selected < ((getmaxy(wcontent) - 3) - 1)) {
+                    }
+                } else {
+                    if (selected < (lights_size - 1)) {
                     selected++;
                 } else {
                     selected = 0;
                     windex = 0;
+                    }
                 }
                 break;
             case 'k': // up
-                if (((getmaxy(wcontent) - 3) - 1) < 1) {
-                    break;
-                }
-
-                // TODO fix
-                if ((selected + windex) <= 4 && (windex > 0)) {
+                if (windex > 0) {
+                    if (selected > (windex + (4 - 1))) {
+                        selected--;
+                    } else {
+                        selected--;
                     windex--;
-                    break;
                 }
-
+                } else {
                 if (selected > 0) {
                     selected--;
                 } else {
-                    selected = ((getmaxy(wcontent) - 3) - 1);
-                    windex = (getmaxy(wcontent) - 3) - selected;
+                        selected = (lights_size - 1);
+
+                        if (wsize < lights_size) {
+                            windex = (lights_size - wsize);
+                        }
+                    }
                 }
                 break;
             case 'l':
                 break;
             case ' ': // mark
-                lights[selected].on = !lights[selected].on;
                 curl_hue_light_toggle();
                 break;
             case 'g': // top
@@ -331,9 +343,10 @@ void loop() {
                 windex = 0;
                 break;
             case 'G': // bottom
-                // TODO hardcoded
-                selected = 15;
-                windex = 1;
+                selected = (lights_size - 1);
+                if (lights_size > wsize) {
+                    windex = (lights_size - wsize);
+                }
                 break;
             case ':': // command
                 break;
