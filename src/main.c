@@ -27,6 +27,213 @@ int selected = 0;
 int windex = 0;
 int wsize = 0;
 
+void curl_hue_light_toggle();
+
+typedef struct Light {
+    char id[37];
+    char *name;
+    bool on;
+    double brightness;
+} Light;
+
+typedef struct LightList {
+    Light *items;
+    size_t count;
+} LightList;
+
+size_t light_cols(void *data) {
+    (void)data;
+    return 3;
+}
+
+size_t light_rows(void *data) {
+    return ((LightList *)data)->count;
+}
+
+void light_header(void *data, size_t col, char *buf, size_t size) {
+    if (col == 0) {
+        snprintf(buf, size, "%s", "NAME");
+    } else if (col == 1) {
+        snprintf(buf, size, "%s", "STATE");
+    } else if (col == 2) {
+        snprintf(buf, size, "%s", "BRIGHTNESS");
+    }
+}
+
+void light_text(void *data, size_t col, size_t row, char *buf, size_t size) {
+    Light *light = &(((LightList *)data)->items[row]);
+
+    if (col == 0) {
+        snprintf(buf, size, "%s", light->name);
+    } else if (col == 1) {
+        snprintf(buf, size, "%s", light->on ? "on" : "off");
+    } else if (col == 2) {
+        snprintf(buf, size, "%*.0lf%%", 3, light->brightness);
+    }
+}
+
+void light_select(void *data, size_t row) {
+    Light *light = &(((LightList *)data)->items[row]);
+    // TODO
+    // curl_hue_light_toggle();
+}
+
+typedef struct Room {
+    char id[37];
+    char *name;
+} Room;
+
+typedef struct RoomList {
+    Room *items;
+    size_t count;
+} RoomList;
+
+// TODO add const
+typedef struct TableBehavior {
+    size_t (*cols)(void *data);
+    size_t (*rows)(void *data);
+    void (*header)(void *data, size_t col, char *buf, size_t size);
+    void (*text)(void *data, size_t col, size_t row, char *buf, size_t size);
+    void (*select)(void *data, size_t row);
+} TableBehavior;
+
+typedef struct Table {
+    void *data;
+    TableBehavior *behavior;
+
+    size_t sindex;
+    size_t windex;
+    size_t wsize;
+} Table;
+
+void table_draw(WINDOW *w, Table *t) {
+    size_t cols = t->behavior->cols(t->data);
+    size_t rows = t->behavior->rows(t->data);
+
+    size_t maxy = getmaxy(w);
+    size_t maxx = getmaxx(w);
+
+    size_t colwidth = (maxx - 2) / cols;
+
+    box(w, 0, 0);
+    char title[maxy - 2];
+    sprintf(title, "%s[%ld]", "lights", ((LightList *)t->data)->count);
+    mvwprintw(w, 0, ((maxx - strlen(title)) / 2), " %s ", title);
+
+    wmove(w, 1, 1);
+    char buf[64];
+    for (size_t col = 0; col < cols; col++) {
+        t->behavior->header(t->data, col, buf, sizeof buf);
+        wprintw(w, "%-*.*s", colwidth, (colwidth - 1), buf);
+    }
+
+    for (size_t row = 0; (row < rows) && (row < (t->wsize)); row++) {
+        wmove(w, (row + 2), 1);
+        
+        if (row == t->sindex) {
+            mvwhline(w, (row + 2), 1, ' ', (maxx - 2));
+        }
+
+        for (size_t col = 0; col < cols; col++) {
+            t->behavior->text(t->data, col, (row + t->windex), buf, sizeof buf);
+            
+            if ((row + t->windex) == t->sindex) {
+                wattrset(w, A_REVERSE);
+                wprintw(w, "%-*.*s", colwidth, (colwidth - 1), buf);
+                wattrset(w, A_NORMAL);
+            } else {
+                wprintw(w, "%-*.*s", colwidth, (colwidth - 1), buf);
+            }
+        }
+    }
+}
+
+void table_resize(WINDOW *w, Table *t) {
+    t->wsize = getmaxy(w) - 3;
+}
+
+void table_up(Table *t) {
+    size_t rows = t->behavior->rows(t->data);
+
+    size_t wmargin = 4;
+    size_t ls = ((LightList *)t->data)->count;
+
+    if (t->windex > 0) {
+        if (t->sindex > (t->windex + (4 - 1))) {
+            t->sindex--;
+        } else {
+            t->sindex--;
+            t->windex--;
+        }
+    } else {
+        if (t->sindex > 0) {
+            t->sindex--;
+        } else {
+            t->sindex = (ls - 1);
+
+            if (t->wsize < ls) {
+                t->windex = (ls - t->wsize);
+            }
+        }
+    }
+}
+
+void table_down(Table *t) {
+    size_t rows = t->behavior->rows(t->data);
+
+    size_t wmargin = 4;
+    size_t ls = ((LightList *)t->data)->count;
+
+    if ((t->windex + t->wsize) < ls) {
+        if (t->sindex < (t->windex + t->wsize - 4)) {
+            t->sindex++;
+        } else {
+            t->sindex++;
+            t->windex++;
+        }
+    } else {
+        if (t->sindex < (ls - 1)) {
+            t->sindex++;
+        } else {
+            t->sindex = 0;
+            t->windex = 0;
+        }
+    }
+}
+
+void table_top(Table *t) {
+    t->sindex = 0;
+    t->windex = 0;
+}
+
+void table_bottom(Table *t) {
+    size_t ls = ((LightList *)t->data)->count;
+    t->sindex = (ls - 1);
+    if (ls > t->wsize) {
+        t->windex = (ls - t->wsize);
+    }
+}
+
+void table_select(Table *t) {
+    t->behavior->select(t->data, t->sindex);
+}
+
+// typedef struct Content {
+//     Table *table;
+// } Content;
+
+// typedef struct Application {
+//     Content *content;
+// } Application;
+
+// Application *app = NULL;
+
+// TODO
+TableBehavior *b = NULL;
+Table *t = NULL;
+LightList *ll = NULL;
+
+
 struct buffer {
     char *data;
     size_t len;
@@ -102,36 +309,41 @@ void curl_hue_lights_read() {
 
             // TODO error handling
             if (cJSON_IsArray(data)) {
-                lights_size = cJSON_GetArraySize(data);
-                lights = calloc(lights_size, sizeof *lights);
-                if (!lights) {
-                    printf("FAIL\n");
-                }
+                ((LightList *)t->data)->count = cJSON_GetArraySize(data);
+                ((LightList *)t->data)->items = calloc(((LightList *)t->data)->count, sizeof(Light));
             }
 
             int i = 0;
             cJSON_ArrayForEach(item, data) {
                 cJSON *id = cJSON_GetObjectItem(item, "id");
                 if (cJSON_IsString(id)) {
-                    lights[i].id = strdup(id->valuestring);
+                    // lights[i].id = strdup(id->valuestring);
+                    Light *light = &(((LightList *)t->data)->items[i]);
+                    strncpy(light->id, id->valuestring, 37);
                 }
 
                 cJSON *metadata = cJSON_GetObjectItem(item, "metadata");
                 cJSON *name = cJSON_GetObjectItem(metadata, "name");
                 if (cJSON_IsString(name)) {
-                    lights[i].name = strdup(name->valuestring);
+                    // lights[i].name = strdup(name->valuestring);
+                    Light *light = &(((LightList *)t->data)->items[i]);
+                    light->name = strdup(name->valuestring);
                 }
 
                 cJSON *on = cJSON_GetObjectItem(item, "on");
                 cJSON *onon = cJSON_GetObjectItem(on, "on");
                 if (cJSON_IsBool(onon)) {
-                    lights[i].on = onon->valueint;
+                    // lights[i].on = onon->valueint;
+                    Light *light = &(((LightList *)t->data)->items[i]);
+                    light->on = onon->valueint;
                 }
 
                 cJSON *dimming = cJSON_GetObjectItem(item, "dimming");
                 cJSON *brightness = cJSON_GetObjectItem(dimming, "brightness");
                 if (cJSON_IsNumber(brightness)) {
-                    lights[i].brightness = brightness->valuedouble;
+                    // lights[i].brightness = brightness->valuedouble;
+                    Light *light = &(((LightList *)t->data)->items[i]);
+                    light->brightness = brightness->valuedouble;   
                 }
 
                 i++;
@@ -154,7 +366,9 @@ static size_t curl_hue_light_toggle_callback(void *buffer, size_t size, size_t n
 }
 
 void curl_hue_light_toggle() {
-    lights[selected].on = !lights[selected].on;
+    // lights[selected].on = !lights[selected].on;
+    Light *light = &((LightList *)t->data)->items[selected];
+    light->on = !light->on;
 
     /* curl request */
     CURL *curl = curl_easy_init();
@@ -168,7 +382,7 @@ void curl_hue_light_toggle() {
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
 
     char url[1024] = {0};
-    snprintf(url, 1024, "https://%s/clip/v2/resource/light/%s", BADDR, lights[selected].id);
+    snprintf(url, 1024, "https://%s/clip/v2/resource/light/%s", BADDR, light->id);
     curl_easy_setopt(curl, CURLOPT_URL, url);
 
     struct curl_slist *headers = NULL;
@@ -183,7 +397,7 @@ void curl_hue_light_toggle() {
 
     cJSON *json = cJSON_CreateObject();
     cJSON *on = cJSON_CreateObject();
-    cJSON_AddBoolToObject(on, "on", lights[selected].on);
+    cJSON_AddBoolToObject(on, "on", light->on);
     cJSON_AddItemToObject(json, "on", on);
     char *content = cJSON_PrintUnformatted(json);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, content);
@@ -214,7 +428,7 @@ void draw_header() {
     }
 
     mvwprintw(wheader, 0, 0, "chue 0.0.1");
-    // mvwprintw(wheader, 1, 0, "win s%3d wi%3d ws%3d ls%3d", selected, windex, wsize, lights_size); // TODO fix
+    // mvwprintw(wheader, 1, 0, "win s%3d wi%3d ws%3d ls%3d", t->sindex, t->windex, t->wsize, 999); // TODO fix
     // mvwprintw(wheader, 2, 0, "time %ld", now);
 
     mvwprintw(wheader, 0, (COLS - 17), "     _           ");
@@ -233,49 +447,10 @@ void draw_content() {
         int width = COLS;
         wcontent = newwin(height, width, starty, startx);
 
-        wsize = getmaxy(wcontent) - 3;
+        t->wsize = getmaxy(wcontent) - 3;
     }
 
-    // int maxy = getmaxy(wcontent);
-    int maxx = getmaxx(wcontent);
-
-    /* title */
-    //wattrset(wcontent, COLOR_PAIR(1));
-    box(wcontent, 0, 0);
-    //wattrset(wcontent, A_NORMAL);
-
-    char title[COLS - 2];
-    int count = lights_size;
-    // sprintf(title, "%s(%s)[%d]", "lights", "all", count);
-    sprintf(title, "%s[%d]", "lights", count);
-    mvwprintw(wcontent, 0, ((maxx - strlen(title)) / 2), " %s ", title);
-
-    /* table header */
-    char *header[] = {"NAME", "STATE", "BRIGHTNESS"};
-    int header_count = 3;
-    int header_width = (maxx - 2) / header_count; // TODO handle remainders
-
-    wmove(wcontent, 1, 1);
-    for (int i = 0; i < header_count; i++) {
-        wprintw(wcontent, "%-*s", header_width, header[i]);
-    }
-
-    /* table items */
-    for (int i = 0; (i < lights_size) && (i < wsize); i++) {
-        wmove(wcontent, (2 + i), 1);
-
-        light *l = &lights[i + windex];
-
-        if ((i + windex) == selected) {
-            wattrset(wcontent, A_REVERSE);
-            mvwhline(wcontent, (2 + i), 1, ' ', (maxx - 2));
-            wprintw(wcontent, "%-*.*s%-*s%-*.0lf", header_width, (header_width - 1), l->name, header_width, (l->on ? "on" : "off"), header_width, l->brightness);
-            wattrset(wcontent, A_NORMAL);
-        } else {
-            wprintw(wcontent, "%-*.*s%-*s%-*.0lf", header_width, (header_width - 1), l->name, header_width, (l->on ? "on" : "off"), header_width, l->brightness);
-        }
-    }
-
+    table_draw(wcontent, t);
     wnoutrefresh(wcontent);
 }
 
@@ -297,56 +472,21 @@ void loop() {
             case 'h':
                 break;
             case 'j': // down
-                if ((windex + wsize) < lights_size) {
-                    if (selected < (windex + wsize - 4)) {
-                        selected++;
-                    } else {
-                        selected++;
-                    windex++;
-                    }
-                } else {
-                    if (selected < (lights_size - 1)) {
-                    selected++;
-                } else {
-                    selected = 0;
-                    windex = 0;
-                    }
-                }
+                table_down(t);
                 break;
             case 'k': // up
-                if (windex > 0) {
-                    if (selected > (windex + (4 - 1))) {
-                        selected--;
-                    } else {
-                        selected--;
-                    windex--;
-                }
-                } else {
-                if (selected > 0) {
-                    selected--;
-                } else {
-                        selected = (lights_size - 1);
-
-                        if (wsize < lights_size) {
-                            windex = (lights_size - wsize);
-                        }
-                    }
-                }
+                table_up(t);
                 break;
             case 'l':
                 break;
             case ' ': // mark
-                curl_hue_light_toggle();
+                table_select(t);
                 break;
             case 'g': // top
-                selected = 0;
-                windex = 0;
+                table_top(t);
                 break;
             case 'G': // bottom
-                selected = (lights_size - 1);
-                if (lights_size > wsize) {
-                    windex = (lights_size - wsize);
-                }
+                table_bottom(t);
                 break;
             case ':': // command
                 break;
@@ -358,12 +498,8 @@ void loop() {
                 // TODO improve?
                 delwin(wheader);
                 wheader = NULL;
-                
                 delwin(wcontent);
                 wcontent = NULL;
-
-                selected = 0;
-                windex = 0;
                 break;
             case ERR:
                 break;
@@ -416,12 +552,33 @@ void ncurses_end() {
 }
 
 void init() {
+    ll = calloc(1, sizeof(LightList));
+    ll->items = NULL;
+    ll->count = 0;
+
+    b = calloc(1, sizeof(TableBehavior));
+    b->cols = light_cols;
+    b->rows = light_rows;
+    b->header = light_header;
+    b->text = light_text;
+    b->select = light_select;
+
+    t = calloc(1, sizeof(Table));
+    t->behavior = b;
+    t->data = ll;
+    t->sindex = 0;
+    t->windex = 0;
+    t->wsize = 0;
+
     curl_init();
     ncurses_init();
 }
 
 void end() {
-    free(lights); // TODO fix
+    free(((LightList *)t->data)->items);
+    free(t->behavior);
+    free(t);
+
     curl_end();
     ncurses_end();
 }
