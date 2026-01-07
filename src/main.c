@@ -74,8 +74,7 @@ void light_text(void *data, size_t col, size_t row, char *buf, size_t size) {
 
 void light_select(void *data, size_t row) {
     Light *light = &(((LightList *)data)->items[row]);
-    // TODO
-    // curl_hue_light_toggle();
+    curl_hue_light_toggle();
 }
 
 typedef struct Room {
@@ -367,7 +366,7 @@ static size_t curl_hue_light_toggle_callback(void *buffer, size_t size, size_t n
 
 void curl_hue_light_toggle() {
     // lights[selected].on = !lights[selected].on;
-    Light *light = &((LightList *)t->data)->items[selected];
+    Light *light = &((LightList *)t->data)->items[t->sindex];
     light->on = !light->on;
 
     /* curl request */
