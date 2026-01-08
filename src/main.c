@@ -16,6 +16,8 @@
 
 #define ESC 17
 
+#define BADDR "<bridge address>"
+#define BUSER "<bridge username>"
 
 time_t now = 0;
 time_t poll = 0;
@@ -40,16 +42,25 @@ LightList *ll = NULL;
 Header *h = NULL;
 Footer *f = NULL;
 
+CURLM *cm;
+
 struct buffer {
     char *data;
     size_t len;
 };
 
+struct request {
+    struct buffer buf;
+    struct curl_slist *headers;
+};
+
 void curl_init() {
     curl_global_init(CURL_GLOBAL_DEFAULT);
+    cm = curl_multi_init();
 }
 
 void curl_end() {
+    curl_multi_cleanup(cm);
     curl_global_cleanup();
 }
 
@@ -221,6 +232,111 @@ void curl_hue_light_toggle() {
     curl_easy_cleanup(curl);
 }
 
+
+void curl_request() {
+    CURL *c = curl_easy_init();
+
+    struct request *req = calloc(1, sizeof(struct request));
+
+    curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 0L);
+
+    char url[1024] = {0};
+    snprintf(url, 1024, "https://%s/clip/v2/resource/light", BADDR);
+    curl_easy_setopt(c, CURLOPT_URL, url);
+
+    req->headers = NULL;
+    req->headers = curl_slist_append(req->headers, "User-Agent: chue/0.0.1");
+
+    char hauth[1024] = {0};
+    snprintf(hauth, 1024, "hue-application-key: %s", BUSER);
+    req->headers = curl_slist_append(req->headers, hauth);
+    curl_easy_setopt(c, CURLOPT_HTTPHEADER, req->headers);
+
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_hue_lights_read_callback);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, &req->buf);
+
+    curl_easy_setopt(c, CURLOPT_PRIVATE, req);
+    curl_multi_add_handle(cm, c);
+}
+
+void curl_poll() {
+    int r;
+    curl_multi_perform(cm, &r);
+    curl_multi_wait(cm, NULL, 0, 25, NULL);
+}
+
+void curl_response() {
+    CURLMsg *msg;
+    int msgr;
+
+    while ((msg = curl_multi_info_read(cm, &msgr))) {
+        if (msg->msg == CURLMSG_DONE) {
+            CURL *c = msg->easy_handle;
+            
+            struct request *req = NULL;
+            curl_easy_getinfo(c, CURLINFO_PRIVATE, &req);
+
+            if (req != NULL) {
+                cJSON *json = cJSON_Parse(req->buf.data);
+
+                if (!json) {
+                    fprintf(stderr, "cjson parse error");
+                } else {
+                    cJSON *data = cJSON_GetObjectItem(json, "data");
+                    cJSON *item = NULL;
+
+                    // TODO error handling
+                    if (cJSON_IsArray(data)) {
+                        ((LightList *)t->data)->count = cJSON_GetArraySize(data);
+                        ((LightList *)t->data)->items = calloc(((LightList *)t->data)->count, sizeof(Light));
+                    }
+
+                    int i = 0;
+                    cJSON_ArrayForEach(item, data) {
+                        cJSON *id = cJSON_GetObjectItem(item, "id");
+                        if (cJSON_IsString(id)) {
+                            Light *light = &(((LightList *)t->data)->items[i]);
+                            strncpy(light->id, id->valuestring, 37);
+                        }
+
+                        cJSON *metadata = cJSON_GetObjectItem(item, "metadata");
+                        cJSON *name = cJSON_GetObjectItem(metadata, "name");
+                        if (cJSON_IsString(name)) {
+                            Light *light = &(((LightList *)t->data)->items[i]);
+                            light->name = strdup(name->valuestring);
+                        }
+
+                        cJSON *on = cJSON_GetObjectItem(item, "on");
+                        cJSON *onon = cJSON_GetObjectItem(on, "on");
+                        if (cJSON_IsBool(onon)) {
+                            Light *light = &(((LightList *)t->data)->items[i]);
+                            light->on = onon->valueint;
+                        }
+
+                        cJSON *dimming = cJSON_GetObjectItem(item, "dimming");
+                        cJSON *brightness = cJSON_GetObjectItem(dimming, "brightness");
+                        if (cJSON_IsNumber(brightness)) {
+                            Light *light = &(((LightList *)t->data)->items[i]);
+                            light->brightness = brightness->valuedouble;   
+                        }
+
+                        i++;
+                    }
+                }
+
+                cJSON_Delete(json);
+                
+                curl_slist_free_all(req->headers);
+                free(req->buf.data);
+                free(req);
+            }
+            curl_multi_remove_handle(cm, c);
+            curl_easy_cleanup(c);
+        }
+    }
+}
+
 static WINDOW *wheader = NULL;
 static WINDOW *wfooter = NULL;
 static WINDOW *wcontent = NULL;
@@ -324,9 +440,12 @@ void loop() {
 
         now = time(NULL);
         if ((now - poll) > 1) {
-            curl_hue_lights_read(); // TODO ui hangs
             poll = now;
+            curl_request();
         }
+
+        curl_poll();
+        curl_response();
 
         draw();
     } while ((ch = getch()));
@@ -334,8 +453,7 @@ void loop() {
 
 int ncurses_init() {
     initscr();
-    timeout(50);
-    // raw();
+    timeout(25);
     cbreak();
     noecho();
     set_escdelay(25);
