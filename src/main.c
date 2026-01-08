@@ -7,215 +7,20 @@
 #include <curl/curl.h>
 #include <ncurses.h>
 
+#include <application/lightlist.h>
+#include <domain/light.h>
+#include <domain/room.h>
+#include <presentation/tui/footer.h>
+#include <presentation/tui/header.h>
+#include <presentation/tui/table.h>
+
 #define ESC 17
 
 
 time_t now = 0;
 time_t poll = 0;
 
-typedef struct light {
-    char *id;
-    char *name;
-    bool on;
-    double brightness;
-} light;
-
-light *lights = NULL;
-int lights_size = 0; // TODO size_t?
-
-int selected = 0;
-int windex = 0;
-int wsize = 0;
-
 void curl_hue_light_toggle();
-
-typedef struct Light {
-    char id[37];
-    char *name;
-    bool on;
-    double brightness;
-} Light;
-
-typedef struct LightList {
-    Light *items;
-    size_t count;
-} LightList;
-
-size_t light_cols(void *data) {
-    (void)data;
-    return 3;
-}
-
-size_t light_rows(void *data) {
-    return ((LightList *)data)->count;
-}
-
-void light_header(void *data, size_t col, char *buf, size_t size) {
-    if (col == 0) {
-        snprintf(buf, size, "%s", "NAME");
-    } else if (col == 1) {
-        snprintf(buf, size, "%s", "STATE");
-    } else if (col == 2) {
-        snprintf(buf, size, "%s", "BRIGHTNESS");
-    }
-}
-
-void light_text(void *data, size_t col, size_t row, char *buf, size_t size) {
-    Light *light = &(((LightList *)data)->items[row]);
-
-    if (col == 0) {
-        snprintf(buf, size, "%s", light->name);
-    } else if (col == 1) {
-        snprintf(buf, size, "%s", light->on ? "on" : "off");
-    } else if (col == 2) {
-        snprintf(buf, size, "%*.0lf%%", 3, light->brightness);
-    }
-}
-
-void light_select(void *data, size_t row) {
-    Light *light = &(((LightList *)data)->items[row]);
-    curl_hue_light_toggle();
-}
-
-typedef struct Room {
-    char id[37];
-    char *name;
-} Room;
-
-typedef struct RoomList {
-    Room *items;
-    size_t count;
-} RoomList;
-
-// TODO add const
-typedef struct TableBehavior {
-    size_t (*cols)(void *data);
-    size_t (*rows)(void *data);
-    void (*header)(void *data, size_t col, char *buf, size_t size);
-    void (*text)(void *data, size_t col, size_t row, char *buf, size_t size);
-    void (*select)(void *data, size_t row);
-} TableBehavior;
-
-typedef struct Table {
-    void *data;
-    TableBehavior *behavior;
-
-    size_t sindex;
-    size_t windex;
-    size_t wsize;
-} Table;
-
-void table_draw(WINDOW *w, Table *t) {
-    size_t cols = t->behavior->cols(t->data);
-    size_t rows = t->behavior->rows(t->data);
-
-    size_t maxy = getmaxy(w);
-    size_t maxx = getmaxx(w);
-
-    size_t colwidth = (maxx - 2) / cols;
-
-    box(w, 0, 0);
-    char title[maxy - 2];
-    sprintf(title, "%s[%ld]", "lights", ((LightList *)t->data)->count);
-    mvwprintw(w, 0, ((maxx - strlen(title)) / 2), " %s ", title);
-
-    wmove(w, 1, 1);
-    char buf[64];
-    for (size_t col = 0; col < cols; col++) {
-        t->behavior->header(t->data, col, buf, sizeof buf);
-        wprintw(w, "%-*.*s", colwidth, (colwidth - 1), buf);
-    }
-
-    for (size_t row = 0; (row < rows) && (row < (t->wsize)); row++) {
-        wmove(w, (row + 2), 1);
-        
-        if (row == t->sindex) {
-            mvwhline(w, (row + 2), 1, ' ', (maxx - 2));
-        }
-
-        for (size_t col = 0; col < cols; col++) {
-            t->behavior->text(t->data, col, (row + t->windex), buf, sizeof buf);
-            
-            if ((row + t->windex) == t->sindex) {
-                wattrset(w, A_REVERSE);
-                wprintw(w, "%-*.*s", colwidth, (colwidth - 1), buf);
-                wattrset(w, A_NORMAL);
-            } else {
-                wprintw(w, "%-*.*s", colwidth, (colwidth - 1), buf);
-            }
-        }
-    }
-}
-
-void table_resize(WINDOW *w, Table *t) {
-    t->wsize = getmaxy(w) - 3;
-}
-
-void table_up(Table *t) {
-    size_t rows = t->behavior->rows(t->data);
-
-    size_t wmargin = 4;
-    size_t ls = ((LightList *)t->data)->count;
-
-    if (t->windex > 0) {
-        if (t->sindex > (t->windex + (4 - 1))) {
-            t->sindex--;
-        } else {
-            t->sindex--;
-            t->windex--;
-        }
-    } else {
-        if (t->sindex > 0) {
-            t->sindex--;
-        } else {
-            t->sindex = (ls - 1);
-
-            if (t->wsize < ls) {
-                t->windex = (ls - t->wsize);
-            }
-        }
-    }
-}
-
-void table_down(Table *t) {
-    size_t rows = t->behavior->rows(t->data);
-
-    size_t wmargin = 4;
-    size_t ls = ((LightList *)t->data)->count;
-
-    if ((t->windex + t->wsize) < ls) {
-        if (t->sindex < (t->windex + t->wsize - 4)) {
-            t->sindex++;
-        } else {
-            t->sindex++;
-            t->windex++;
-        }
-    } else {
-        if (t->sindex < (ls - 1)) {
-            t->sindex++;
-        } else {
-            t->sindex = 0;
-            t->windex = 0;
-        }
-    }
-}
-
-void table_top(Table *t) {
-    t->sindex = 0;
-    t->windex = 0;
-}
-
-void table_bottom(Table *t) {
-    size_t ls = ((LightList *)t->data)->count;
-    t->sindex = (ls - 1);
-    if (ls > t->wsize) {
-        t->windex = (ls - t->wsize);
-    }
-}
-
-void table_select(Table *t) {
-    t->behavior->select(t->data, t->sindex);
-}
 
 // typedef struct Content {
 //     Table *table;
@@ -232,6 +37,8 @@ TableBehavior *b = NULL;
 Table *t = NULL;
 LightList *ll = NULL;
 
+Header *h = NULL;
+Footer *f = NULL;
 
 struct buffer {
     char *data;
@@ -415,6 +222,7 @@ void curl_hue_light_toggle() {
 }
 
 static WINDOW *wheader = NULL;
+static WINDOW *wfooter = NULL;
 static WINDOW *wcontent = NULL;
 
 void draw_header() {
@@ -426,16 +234,21 @@ void draw_header() {
         wheader = newwin(height, width, starty, startx);
     }
 
-    mvwprintw(wheader, 0, 0, "chue 0.0.1");
-    // mvwprintw(wheader, 1, 0, "win s%3d wi%3d ws%3d ls%3d", t->sindex, t->windex, t->wsize, 999); // TODO fix
-    // mvwprintw(wheader, 2, 0, "time %ld", now);
-
-    mvwprintw(wheader, 0, (COLS - 17), "     _           ");
-    mvwprintw(wheader, 1, (COLS - 17), " ___| |_ _ _ ___ ");
-    mvwprintw(wheader, 2, (COLS - 17), "|  _|   | | | -_|");
-    mvwprintw(wheader, 3, (COLS - 17), "|___|_|_|___|___|");
-
+    header_draw(wheader, h);
     wnoutrefresh(wheader);
+}
+
+void draw_footer() {
+    if (wfooter == NULL) {
+        int starty = LINES - 1;
+        int startx = 0;
+        int height = 1;
+        int width = COLS;
+        wfooter = newwin(height, width, starty, startx);
+    }
+
+    footer_draw(wfooter, f);
+    wnoutrefresh(wfooter);
 }
 
 void draw_content() {
@@ -457,6 +270,7 @@ void draw() {
     refresh();
 
     draw_header();
+    draw_footer();
     draw_content();
 
     doupdate();
@@ -497,6 +311,8 @@ void loop() {
                 // TODO improve?
                 delwin(wheader);
                 wheader = NULL;
+                delwin(wfooter);
+                wfooter = NULL;
                 delwin(wcontent);
                 wcontent = NULL;
                 break;
@@ -547,6 +363,14 @@ void ncurses_end() {
         delwin(wheader);
     }
 
+    if (wfooter != NULL) {
+        delwin(wfooter);
+    }
+
+    if (wcontent != NULL) {
+        delwin(wcontent);
+    }
+
     endwin();
 }
 
@@ -555,19 +379,16 @@ void init() {
     ll->items = NULL;
     ll->count = 0;
 
-    b = calloc(1, sizeof(TableBehavior));
-    b->cols = light_cols;
-    b->rows = light_rows;
-    b->header = light_header;
-    b->text = light_text;
-    b->select = light_select;
+    b = tablebehavior_create();
+    b->cols = lightlist_cols;
+    b->rows = lightlist_rows;
+    b->header = lightlist_header;
+    b->text = lightlist_text;
+    b->select = lightlist_select;
 
-    t = calloc(1, sizeof(Table));
-    t->behavior = b;
-    t->data = ll;
-    t->sindex = 0;
-    t->windex = 0;
-    t->wsize = 0;
+    t = table_create(b, ll);
+    h = header_create();
+    f = footer_create();
 
     curl_init();
     ncurses_init();
@@ -575,8 +396,10 @@ void init() {
 
 void end() {
     free(((LightList *)t->data)->items);
-    free(t->behavior);
-    free(t);
+    tablebehavior_free(b);
+    table_free(t);
+    header_free(h);
+    footer_free(f);
 
     curl_end();
     ncurses_end();

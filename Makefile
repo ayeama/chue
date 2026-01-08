@@ -1,9 +1,11 @@
-CC      := cc
-SRC     := $(wildcard src/*.c)
-OBJ     := $(SRC:src/%.c=build/%.o)
-BIN     := build/chue
+CC := cc
 
-CFLAGS  := -Wall -Wextra -std=c23
+SRC := $(shell find src -type f -name '*.c')
+OBJ := $(SRC:src/%.c=build/%.o)
+
+BIN := build/chue
+
+CFLAGS  := -Wall -Wextra -std=c23 -Iinclude
 LDFLAGS := -lncurses -lcurl -lcjson #-lsqlite3
 
 .PHONY: all run clean
@@ -14,11 +16,11 @@ $(BIN): $(OBJ)
 	$(CC) $(OBJ) -o $@ $(LDFLAGS)
 
 build/%.o: src/%.c
-	@mkdir -p build
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 run:
-	./build/chue
+	./$(BIN)
 
 clean:
 	rm -rf build
