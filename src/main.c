@@ -14,10 +14,18 @@
 #include <presentation/tui/header.h>
 #include <presentation/tui/table.h>
 
-#define ESC 17
+#define LF 10
+#define ESC 27
 
 #define BADDR "<bridge address>"
 #define BUSER "<bridge username>"
+
+typedef enum {
+    MODE_NORMAL,
+    MODE_COMMAND,
+} Mode;
+
+Mode mode = MODE_NORMAL;
 
 time_t now = 0;
 time_t poll = 0;
@@ -395,6 +403,7 @@ void draw() {
 void loop() {
     int ch = 0;
     do {
+        if (mode == MODE_NORMAL) {
         switch (ch) {
             case 'q': // quit
                 return;
@@ -418,6 +427,7 @@ void loop() {
                 table_bottom(t);
                 break;
             case ':': // command
+                    mode = MODE_COMMAND;
                 break;
             case '/': // filter
                 break;
@@ -436,6 +446,35 @@ void loop() {
                 break;
             default:
                 break;
+            }
+        } else if (mode == MODE_COMMAND) {
+            if (f->command == NULL) {
+                f->command = calloc(32, sizeof(char));
+            }
+
+            switch (ch) {
+                case ERR:
+                    break;
+                case LF:
+                    // TODO
+                case ESC:
+                    footer_command_clear(wfooter, f); // TODO tmp
+                    mode = MODE_NORMAL;
+                    break;
+                case KEY_BACKSPACE:
+                    if (f->command != NULL) {
+                        size_t len = strlen(f->command);
+                        if (len > 0) {
+                            f->command[(len - 1)] = '\0';
+                        }
+                    }
+                    break;
+                default:
+                    char buf[32] = {0};
+                    snprintf(buf, 32, "%s%c", f->command, ch);
+                    strncpy(f->command, buf, 32);
+                    break;
+            }
         }
 
         now = time(NULL);

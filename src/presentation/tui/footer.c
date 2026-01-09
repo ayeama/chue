@@ -18,10 +18,19 @@ void footer_free(Footer *f) {
 void footer_draw(WINDOW *w, Footer *f) {
     (void)f;
 
-    mvwprintw(w, 0, 0, ":quit");
+    if (f->command != NULL) {
+        mvwprintw(w, 0, 0, ":%s", f->command);
+    }
 }
 
 void footer_resize(WINDOW *w, Footer *f) {
     (void)w;
     (void)f;
+}
+
+// TODO tmp wrong location
+void footer_command_clear(WINDOW *w, Footer *f) {
+    free(f->command);
+    f->command = NULL;
+    wclear(w);
 }
