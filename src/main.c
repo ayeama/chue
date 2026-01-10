@@ -16,6 +16,7 @@
 #include <presentation/tui/table.h>
 
 #define BS 8
+#define HT 9
 #define LF 10
 #define ESC 27
 #define DEL 127
@@ -36,6 +37,14 @@ typedef enum {
 } Mode;
 
 Mode mode = MODE_NORMAL;
+
+typedef enum {
+    COMMAND_ERROR,
+    COMMAND_LIGHT,
+    COMMAND_ROOM,
+    COMMAND_HELP,
+    COMMAND_QUIT,
+} Command;
 
 time_t now = 0;
 time_t poll = 0;
@@ -63,6 +72,10 @@ Table *t = NULL;
 
 Header *h = NULL;
 Footer *f = NULL;
+
+static WINDOW *wheader = NULL;
+static WINDOW *wfooter = NULL;
+static WINDOW *wcontent = NULL;
 
 CURLM *cm;
 
@@ -352,6 +365,10 @@ void curl_response() {
             struct request *req = NULL;
             curl_easy_getinfo(c, CURLINFO_PRIVATE, &req);
 
+            double response_time;
+            curl_easy_getinfo(c, CURLINFO_TOTAL_TIME, &response_time);
+            mvwprintw(wfooter, 0, (getmaxx(wfooter) - 7), "%d:%3.0lfms", req->type, (response_time * 1000)); // TODO tmp
+
             if (req != NULL) {
                 // TODO refactor
                 cJSON *json = cJSON_Parse(req->buf.data);
@@ -365,42 +382,48 @@ void curl_response() {
                         cJSON *item = NULL;
 
                         // TODO error handling
-                        if (cJSON_IsArray(data)) {
-                            lightlist->count = cJSON_GetArraySize(data);
-                            lightlist->items = calloc(lightlist->count, sizeof(Light));
+                        if (!cJSON_IsArray(data)) {
+                            break;
                         }
+                        size_t count = cJSON_GetArraySize(data);
+                        Light *nlights = calloc(count, sizeof(Light));
 
                         int i = 0;
                         cJSON_ArrayForEach(item, data) {
                             cJSON *id = cJSON_GetObjectItem(item, "id");
                             if (cJSON_IsString(id)) {
-                                Light *light = &(lightlist->items[i]);
+                                Light *light = &(nlights[i]);
                                 strncpy(light->id, id->valuestring, 37);
                             }
 
                             cJSON *metadata = cJSON_GetObjectItem(item, "metadata");
                             cJSON *name = cJSON_GetObjectItem(metadata, "name");
                             if (cJSON_IsString(name)) {
-                                Light *light = &(lightlist->items[i]);
+                                Light *light = &(nlights[i]);
                                 light->name = strdup(name->valuestring);
                             }
 
                             cJSON *on = cJSON_GetObjectItem(item, "on");
                             cJSON *onon = cJSON_GetObjectItem(on, "on");
                             if (cJSON_IsBool(onon)) {
-                                Light *light = &(lightlist->items[i]);
+                                Light *light = &(nlights[i]);
                                 light->on = onon->valueint;
                             }
 
                             cJSON *dimming = cJSON_GetObjectItem(item, "dimming");
                             cJSON *brightness = cJSON_GetObjectItem(dimming, "brightness");
                             if (cJSON_IsNumber(brightness)) {
-                                Light *light = &(lightlist->items[i]);
+                                Light *light = &(nlights[i]);
                                 light->brightness = brightness->valuedouble;   
                             }
 
                             i++;
                         }
+
+                        free(lightlist->items);
+                        lightlist->items = nlights;
+                        lightlist->count = count;
+
                         break;
                     }
                     case REQUEST_TYPE_ROOM: {
@@ -408,28 +431,35 @@ void curl_response() {
                         cJSON *item = NULL;
 
                         // TODO error handling
-                        if (cJSON_IsArray(data)) {
-                            roomlist->count = cJSON_GetArraySize(data);
-                            roomlist->items = calloc(roomlist->count, sizeof(Room));
+                        if (!cJSON_IsArray(data)) {
+                            break;
                         }
+
+                        size_t count = cJSON_GetArraySize(data);
+                        Room *nrooms = calloc(count, sizeof(Room));
 
                         int i = 0;
                         cJSON_ArrayForEach(item, data) {
                             cJSON *id = cJSON_GetObjectItem(item, "id");
                             if (cJSON_IsString(id)) {
-                                Room *room = &(roomlist->items[i]);
+                                Room *room = &(nrooms[i]);
                                 strncpy(room->id, id->valuestring, 37);
                             }
 
                             cJSON *metadata = cJSON_GetObjectItem(item, "metadata");
                             cJSON *name = cJSON_GetObjectItem(metadata, "name");
                             if (cJSON_IsString(name)) {
-                                Room *room = &(roomlist->items[i]);
+                                Room *room = &(nrooms[i]);
                                 room->name = strdup(name->valuestring);
                             }
 
                             i++;
                         }
+
+                        free(roomlist->items);
+                        roomlist->items = nrooms;
+                        roomlist->count = count;
+
                         break;
                     }
                     default:
@@ -448,10 +478,6 @@ void curl_response() {
         }
     }
 }
-
-static WINDOW *wheader = NULL;
-static WINDOW *wfooter = NULL;
-static WINDOW *wcontent = NULL;
 
 void draw_header() {
     if (wheader == NULL) {
@@ -504,26 +530,34 @@ void draw() {
     doupdate();
 }
 
-void command_execute() {
+Command command_execute() {
     if (f->command == NULL || strcmp(f->command, "") == 0) {
-        return;
+        return COMMAND_ERROR;
     }
 
-    if (strcmp(f->command, "q") == 0) {
-        // TODO
-    } else if (strncmp(f->command, "light", strlen(f->command)) == 0) {
+    if (strncmp(f->command, "light", strlen(f->command)) == 0) {
         t->data = lightlist;
         t->behavior = light;
         t->sindex = 0;
         t->windex = 0;
         table_clear(wcontent, t);
+        return COMMAND_LIGHT;
     } else if (strncmp(f->command, "room", strlen(f->command)) == 0) {
         t->data = roomlist;
         t->behavior = room;
         t->sindex = 0;
         t->windex = 0;
         table_clear(wcontent, t);
+        return COMMAND_ROOM;
+    } else if (strncmp(f->command, "help", strlen(f->command)) == 0) {
+        // TODO
+        return COMMAND_HELP;
+    } else if (strncmp(f->command, "quit", strlen(f->command)) == 0) {
+        // TODO
+        return COMMAND_QUIT;
     }
+
+    return COMMAND_ERROR;
 }
 
 void loop() {
@@ -531,8 +565,6 @@ void loop() {
     do {
         if (mode == MODE_NORMAL) {
             switch (ch) {
-                case 'q': // quit
-                    return;
                 case 'h':
                     break;
                 case 'j': // down
@@ -579,11 +611,15 @@ void loop() {
             }
 
             switch (ch) {
+                case HT:
                 case ERR:
                     break;
                 case LF:
                     // TODO
-                    command_execute();
+                    Command c = command_execute();
+                    if (c == COMMAND_QUIT) {
+                        return;
+                    }
                     [[fallthrough]]; // NOTE C23
                 case ESC:
                     footer_command_clear(wfooter, f); // TODO tmp
@@ -593,7 +629,10 @@ void loop() {
                 case BS:
                     if (f->command != NULL) {
                         size_t len = strlen(f->command);
-                        if (len > 0) {
+                        if (len == 0) {
+                            footer_command_clear(wfooter, f);
+                            mode = MODE_NORMAL;
+                        } else if (len > 0) {
                             f->command[(len - 1)] = '\0';
                         }
                     }
