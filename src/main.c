@@ -8,17 +8,27 @@
 #include <ncurses.h>
 
 #include <application/lightlist.h>
+#include <application/roomlist.h>
 #include <domain/light.h>
 #include <domain/room.h>
 #include <presentation/tui/footer.h>
 #include <presentation/tui/header.h>
 #include <presentation/tui/table.h>
 
+#define BS 8
 #define LF 10
 #define ESC 27
+#define DEL 127
 
-#define BADDR "<bridge address>"
+#define BADDR "<bridge address>" 
 #define BUSER "<bridge username>"
+
+typedef enum {
+    RESOURCE_LIGHT,
+    RESOURCE_ROOM,
+} Resource;
+
+Resource resource = RESOURCE_LIGHT;
 
 typedef enum {
     MODE_NORMAL,
@@ -43,9 +53,13 @@ void curl_hue_light_toggle();
 // Application *app = NULL;
 
 // TODO
-TableBehavior *b = NULL;
+TableBehavior *light = NULL;
+LightList *lightlist = NULL;
+
+TableBehavior *room = NULL;
+RoomList *roomlist = NULL;
+
 Table *t = NULL;
-LightList *ll = NULL;
 
 Header *h = NULL;
 Footer *f = NULL;
@@ -57,7 +71,13 @@ struct buffer {
     size_t len;
 };
 
+enum request_type {
+    REQUEST_TYPE_LIGHT,
+    REQUEST_TYPE_ROOM,
+};
+
 struct request {
+    enum request_type type;
     struct buffer buf;
     struct curl_slist *headers;
 };
@@ -73,6 +93,24 @@ void curl_end() {
 }
 
 static size_t curl_hue_lights_read_callback(void *buffer, size_t size, size_t nmemb, void *stream) {
+    size_t total = size * nmemb;
+    struct buffer *buf = stream;
+
+    char *ndata = realloc(buf->data, (buf->len + total + 1));
+    if (!ndata) {
+        return 0;
+    }
+
+    buf->data = ndata;
+    memcpy((buf->data + buf->len), buffer, total);
+    buf->len += total;
+    buf->data[buf->len] = '\0';
+
+    return total;
+}
+
+// TODO needed?
+static size_t curl_hue_rooms_read_callback(void *buffer, size_t size, size_t nmemb, void *stream) {
     size_t total = size * nmemb;
     struct buffer *buf = stream;
 
@@ -241,10 +279,11 @@ void curl_hue_light_toggle() {
 }
 
 
-void curl_request() {
+void curl_request_light() {
     CURL *c = curl_easy_init();
 
     struct request *req = calloc(1, sizeof(struct request));
+    req->type = REQUEST_TYPE_LIGHT;
 
     curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 0L);
@@ -262,6 +301,34 @@ void curl_request() {
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, req->headers);
 
     curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_hue_lights_read_callback);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, &req->buf);
+
+    curl_easy_setopt(c, CURLOPT_PRIVATE, req);
+    curl_multi_add_handle(cm, c);
+}
+
+void curl_request_room() {
+    CURL *c = curl_easy_init();
+
+    struct request *req = calloc(1, sizeof(struct request));
+    req->type = REQUEST_TYPE_ROOM;
+
+    curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 0L);
+
+    char url[1024] = {0};
+    snprintf(url, 1024, "https://%s/clip/v2/resource/room", BADDR);
+    curl_easy_setopt(c, CURLOPT_URL, url);
+
+    req->headers = NULL;
+    req->headers = curl_slist_append(req->headers, "User-Agent: chue/0.0.1");
+
+    char hauth[1024] = {0};
+    snprintf(hauth, 1024, "hue-application-key: %s", BUSER);
+    req->headers = curl_slist_append(req->headers, hauth);
+    curl_easy_setopt(c, CURLOPT_HTTPHEADER, req->headers);
+
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_hue_rooms_read_callback);
     curl_easy_setopt(c, CURLOPT_WRITEDATA, &req->buf);
 
     curl_easy_setopt(c, CURLOPT_PRIVATE, req);
@@ -286,59 +353,96 @@ void curl_response() {
             curl_easy_getinfo(c, CURLINFO_PRIVATE, &req);
 
             if (req != NULL) {
+                // TODO refactor
                 cJSON *json = cJSON_Parse(req->buf.data);
-
                 if (!json) {
                     fprintf(stderr, "cjson parse error");
-                } else {
-                    cJSON *data = cJSON_GetObjectItem(json, "data");
-                    cJSON *item = NULL;
-
-                    // TODO error handling
-                    if (cJSON_IsArray(data)) {
-                        ((LightList *)t->data)->count = cJSON_GetArraySize(data);
-                        ((LightList *)t->data)->items = calloc(((LightList *)t->data)->count, sizeof(Light));
-                    }
-
-                    int i = 0;
-                    cJSON_ArrayForEach(item, data) {
-                        cJSON *id = cJSON_GetObjectItem(item, "id");
-                        if (cJSON_IsString(id)) {
-                            Light *light = &(((LightList *)t->data)->items[i]);
-                            strncpy(light->id, id->valuestring, 37);
-                        }
-
-                        cJSON *metadata = cJSON_GetObjectItem(item, "metadata");
-                        cJSON *name = cJSON_GetObjectItem(metadata, "name");
-                        if (cJSON_IsString(name)) {
-                            Light *light = &(((LightList *)t->data)->items[i]);
-                            light->name = strdup(name->valuestring);
-                        }
-
-                        cJSON *on = cJSON_GetObjectItem(item, "on");
-                        cJSON *onon = cJSON_GetObjectItem(on, "on");
-                        if (cJSON_IsBool(onon)) {
-                            Light *light = &(((LightList *)t->data)->items[i]);
-                            light->on = onon->valueint;
-                        }
-
-                        cJSON *dimming = cJSON_GetObjectItem(item, "dimming");
-                        cJSON *brightness = cJSON_GetObjectItem(dimming, "brightness");
-                        if (cJSON_IsNumber(brightness)) {
-                            Light *light = &(((LightList *)t->data)->items[i]);
-                            light->brightness = brightness->valuedouble;   
-                        }
-
-                        i++;
-                    }
                 }
 
+                switch (req->type) {
+                    case REQUEST_TYPE_LIGHT: {
+                        cJSON *data = cJSON_GetObjectItem(json, "data");
+                        cJSON *item = NULL;
+
+                        // TODO error handling
+                        if (cJSON_IsArray(data)) {
+                            lightlist->count = cJSON_GetArraySize(data);
+                            lightlist->items = calloc(lightlist->count, sizeof(Light));
+                        }
+
+                        int i = 0;
+                        cJSON_ArrayForEach(item, data) {
+                            cJSON *id = cJSON_GetObjectItem(item, "id");
+                            if (cJSON_IsString(id)) {
+                                Light *light = &(lightlist->items[i]);
+                                strncpy(light->id, id->valuestring, 37);
+                            }
+
+                            cJSON *metadata = cJSON_GetObjectItem(item, "metadata");
+                            cJSON *name = cJSON_GetObjectItem(metadata, "name");
+                            if (cJSON_IsString(name)) {
+                                Light *light = &(lightlist->items[i]);
+                                light->name = strdup(name->valuestring);
+                            }
+
+                            cJSON *on = cJSON_GetObjectItem(item, "on");
+                            cJSON *onon = cJSON_GetObjectItem(on, "on");
+                            if (cJSON_IsBool(onon)) {
+                                Light *light = &(lightlist->items[i]);
+                                light->on = onon->valueint;
+                            }
+
+                            cJSON *dimming = cJSON_GetObjectItem(item, "dimming");
+                            cJSON *brightness = cJSON_GetObjectItem(dimming, "brightness");
+                            if (cJSON_IsNumber(brightness)) {
+                                Light *light = &(lightlist->items[i]);
+                                light->brightness = brightness->valuedouble;   
+                            }
+
+                            i++;
+                        }
+                        break;
+                    }
+                    case REQUEST_TYPE_ROOM: {
+                        cJSON *data = cJSON_GetObjectItem(json, "data");
+                        cJSON *item = NULL;
+
+                        // TODO error handling
+                        if (cJSON_IsArray(data)) {
+                            roomlist->count = cJSON_GetArraySize(data);
+                            roomlist->items = calloc(roomlist->count, sizeof(Room));
+                        }
+
+                        int i = 0;
+                        cJSON_ArrayForEach(item, data) {
+                            cJSON *id = cJSON_GetObjectItem(item, "id");
+                            if (cJSON_IsString(id)) {
+                                Room *room = &(roomlist->items[i]);
+                                strncpy(room->id, id->valuestring, 37);
+                            }
+
+                            cJSON *metadata = cJSON_GetObjectItem(item, "metadata");
+                            cJSON *name = cJSON_GetObjectItem(metadata, "name");
+                            if (cJSON_IsString(name)) {
+                                Room *room = &(roomlist->items[i]);
+                                room->name = strdup(name->valuestring);
+                            }
+
+                            i++;
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            
                 cJSON_Delete(json);
-                
+    
                 curl_slist_free_all(req->headers);
                 free(req->buf.data);
                 free(req);
             }
+
             curl_multi_remove_handle(cm, c);
             curl_easy_cleanup(c);
         }
@@ -400,52 +504,74 @@ void draw() {
     doupdate();
 }
 
+void command_execute() {
+    if (f->command == NULL || strcmp(f->command, "") == 0) {
+        return;
+    }
+
+    if (strcmp(f->command, "q") == 0) {
+        // TODO
+    } else if (strncmp(f->command, "light", strlen(f->command)) == 0) {
+        t->data = lightlist;
+        t->behavior = light;
+        t->sindex = 0;
+        t->windex = 0;
+        table_clear(wcontent, t);
+    } else if (strncmp(f->command, "room", strlen(f->command)) == 0) {
+        t->data = roomlist;
+        t->behavior = room;
+        t->sindex = 0;
+        t->windex = 0;
+        table_clear(wcontent, t);
+    }
+}
+
 void loop() {
     int ch = 0;
     do {
         if (mode == MODE_NORMAL) {
-        switch (ch) {
-            case 'q': // quit
-                return;
-            case 'h':
-                break;
-            case 'j': // down
-                table_down(t);
-                break;
-            case 'k': // up
-                table_up(t);
-                break;
-            case 'l':
-                break;
-            case ' ': // mark
-                table_select(t);
-                break;
-            case 'g': // top
-                table_top(t);
-                break;
-            case 'G': // bottom
-                table_bottom(t);
-                break;
-            case ':': // command
+            switch (ch) {
+                case 'q': // quit
+                    return;
+                case 'h':
+                    break;
+                case 'j': // down
+                    table_down(t);
+                    break;
+                case 'k': // up
+                    table_up(t);
+                    break;
+                case 'l':
+                    break;
+                case ' ': // mark
+                    table_select(t);
+                    break;
+                case 'g': // top
+                    table_top(t);
+                    break;
+                case 'G': // bottom
+                    table_bottom(t);
+                    break;
+                case ':': // command
                     mode = MODE_COMMAND;
-                break;
-            case '/': // filter
-                break;
-            case ESC: // clear, cancel, back
-                break;
-            case KEY_RESIZE: // window resize
-                // TODO improve?
-                delwin(wheader);
-                wheader = NULL;
-                delwin(wfooter);
-                wfooter = NULL;
-                delwin(wcontent);
-                wcontent = NULL;
-                break;
-            case ERR:
-                break;
-            default:
-                break;
+                    break;
+                case '/': // filter
+                    break;
+                case ESC: // clear, cancel, back
+                    break;
+                case KEY_RESIZE: // window resize
+                    // TODO improve?
+                    delwin(wheader);
+                    wheader = NULL;
+                    delwin(wfooter);
+                    wfooter = NULL;
+                    delwin(wcontent);
+                    wcontent = NULL;
+                    break;
+                case ERR:
+                    break;
+                default:
+                    break;
             }
         } else if (mode == MODE_COMMAND) {
             if (f->command == NULL) {
@@ -457,11 +583,14 @@ void loop() {
                     break;
                 case LF:
                     // TODO
+                    command_execute();
+                    [[fallthrough]]; // NOTE C23
                 case ESC:
                     footer_command_clear(wfooter, f); // TODO tmp
                     mode = MODE_NORMAL;
                     break;
-                case KEY_BACKSPACE:
+                case DEL:
+                case BS:
                     if (f->command != NULL) {
                         size_t len = strlen(f->command);
                         if (len > 0) {
@@ -480,7 +609,8 @@ void loop() {
         now = time(NULL);
         if ((now - poll) > 1) {
             poll = now;
-            curl_request();
+            curl_request_light();
+            curl_request_room();
         }
 
         curl_poll();
@@ -532,18 +662,31 @@ void ncurses_end() {
 }
 
 void init() {
-    ll = calloc(1, sizeof(LightList));
-    ll->items = NULL;
-    ll->count = 0;
+    lightlist = calloc(1, sizeof(LightList));
+    lightlist->items = NULL;
+    lightlist->count = 0;
 
-    b = tablebehavior_create();
-    b->cols = lightlist_cols;
-    b->rows = lightlist_rows;
-    b->header = lightlist_header;
-    b->text = lightlist_text;
-    b->select = lightlist_select;
+    light = tablebehavior_create();
+    light->cols = lightlist_cols;
+    light->rows = lightlist_rows;
+    light->title = lightlist_title;
+    light->header = lightlist_header;
+    light->text = lightlist_text;
+    light->select = lightlist_select;
 
-    t = table_create(b, ll);
+    roomlist = calloc(1, sizeof(RoomList));
+    roomlist->items = NULL;
+    roomlist->count = 0;
+
+    room = tablebehavior_create();
+    room->cols = roomlist_cols;
+    room->rows = roomlist_rows;
+    room->title = roomlist_title;
+    room->header = roomlist_header;
+    room->text = roomlist_text;
+    room->select = roomlist_select;
+
+    t = table_create(light, lightlist);
     h = header_create();
     f = footer_create();
 
@@ -552,8 +695,11 @@ void init() {
 }
 
 void end() {
-    free(((LightList *)t->data)->items);
-    tablebehavior_free(b);
+    free(((LightList *)t->data)->items); // TODO unknown type?
+    
+    tablebehavior_free(light);
+    tablebehavior_free(room);
+
     table_free(t);
     header_free(h);
     footer_free(f);

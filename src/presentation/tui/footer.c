@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include <presentation/tui/footer.h>
 
@@ -20,7 +21,19 @@ void footer_draw(WINDOW *w, Footer *f) {
 
     if (f->command != NULL) {
         mvwprintw(w, 0, 0, ":%s", f->command);
+        
+        size_t len = strlen(f->command);
+        if (len > 0) {
+            wattrset(w, A_DIM);
+            if (strncmp(f->command, "light", len) == 0) {
+                mvwprintw(w, 0, (1 + len), "%s", "light" + len);
+            } else if (strncmp(f->command, "room", len) == 0) {
+                mvwprintw(w, 0, (1 + len), "%s", "room" + len);
+            }
+            wattrset(w, A_NORMAL);
+        }
     }
+
 }
 
 void footer_resize(WINDOW *w, Footer *f) {

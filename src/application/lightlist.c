@@ -12,7 +12,13 @@ size_t lightlist_rows(void *data) {
     return ((LightList *)data)->count;
 }
 
+void lightlist_title(void *data, char *buf, size_t size) {
+    snprintf(buf, size, "%s[%ld]", "lights", ((LightList *)data)->count);
+}
+
 void lightlist_header(void *data, size_t col, char *buf, size_t size) {
+    (void)data;
+
     if (col == 0) {
         snprintf(buf, size, "%s", "NAME");
     } else if (col == 1) {
@@ -35,6 +41,9 @@ void lightlist_text(void *data, size_t col, size_t row, char *buf, size_t size) 
 }
 
 void lightlist_select(void *data, size_t row) {
-    Light *light = &(((LightList *)data)->items[row]);
+    (void)data;
+    (void)row;
+
+    // Light *light = &(((LightList *)data)->items[row]);
     // curl_hue_light_toggle();
 }

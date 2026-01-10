@@ -14,7 +14,9 @@ size_t lightlist_cols(void *data);
 
 size_t lightlist_rows(void *data);
 
-void lightlist_header(void *data, size_t vol, char *buf, size_t size);
+void lightlist_title(void *data, char *buf, size_t size);
+
+void lightlist_header(void *data, size_t col, char *buf, size_t size);
 
 void lightlist_text(void *data, size_t col, size_t row, char *buf, size_t size);
 

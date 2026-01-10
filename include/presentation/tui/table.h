@@ -8,6 +8,7 @@
 typedef struct TableBehavior {
     size_t (*cols)(void *data);
     size_t (*rows)(void *data);
+    void (*title)(void *data, char *buf, size_t size);
     void (*header)(void *data, size_t col, char *buf, size_t size);
     void (*text)(void *data, size_t col, size_t row, char *buf, size_t size);
     void (*select)(void *data, size_t row);
@@ -31,6 +32,8 @@ Table *table_create(TableBehavior *b, void *data);
 void table_free(Table *t);
 
 void table_draw(WINDOW *w, Table *t);
+
+void table_clear(WINDOW *w, Table *t); // TODO
 
 void table_resize(WINDOW *w, Table *t);
 

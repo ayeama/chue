@@ -42,17 +42,20 @@ void table_draw(WINDOW *w, Table *t) {
     size_t cols = t->behavior->cols(t->data);
     size_t rows = t->behavior->rows(t->data);
 
-    size_t maxy = getmaxy(w);
+    // size_t maxy = getmaxy(w);
     size_t maxx = getmaxx(w);
 
     size_t colwidth = (maxx - 2) / cols;
 
     box(w, 0, 0);
-    char title[maxy - 2];
-    sprintf(title, "%s[%ld]", "lights", ((LightList *)t->data)->count);
+
+    char title[maxx - 2];
+    t->behavior->title(t->data, title, sizeof title);
+    // TODO append filter to title
     mvwprintw(w, 0, ((maxx - strlen(title)) / 2), " %s ", title);
 
     wmove(w, 1, 1);
+
     char buf[64];
     for (size_t col = 0; col < cols; col++) {
         t->behavior->header(t->data, col, buf, sizeof buf);
@@ -80,18 +83,22 @@ void table_draw(WINDOW *w, Table *t) {
     }
 }
 
+void table_clear(WINDOW *w, Table *t) {
+    (void)t;
+
+    wclear(w);
+}
+
 void table_resize(WINDOW *w, Table *t) {
     t->wsize = getmaxy(w) - 3;
 }
 
 void table_up(Table *t) {
-    size_t rows = t->behavior->rows(t->data);
-
     size_t wmargin = 4;
     size_t ls = ((LightList *)t->data)->count;
 
     if (t->windex > 0) {
-        if (t->sindex > (t->windex + (4 - 1))) {
+        if (t->sindex > (t->windex + (wmargin - 1))) {
             t->sindex--;
         } else {
             t->sindex--;
@@ -111,13 +118,11 @@ void table_up(Table *t) {
 }
 
 void table_down(Table *t) {
-    size_t rows = t->behavior->rows(t->data);
-
     size_t wmargin = 4;
     size_t ls = ((LightList *)t->data)->count;
 
     if ((t->windex + t->wsize) < ls) {
-        if (t->sindex < (t->windex + t->wsize - 4)) {
+        if (t->sindex < (t->windex + t->wsize - wmargin)) {
             t->sindex++;
         } else {
             t->sindex++;
