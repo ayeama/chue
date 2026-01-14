@@ -10,6 +10,8 @@ typedef struct RoomList {
     size_t count;
 } RoomList;
 
+void roomlist_free(RoomList *rl);
+
 size_t roomlist_cols(void *data);
 
 size_t roomlist_rows(void *data);

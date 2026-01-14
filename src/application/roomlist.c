@@ -3,6 +3,13 @@
 
 #include <application/roomlist.h>
 
+void roomlist_free(RoomList *rl) {
+    for (size_t i = 0; i < rl->count; i++) {
+        room_free(&rl->items[i]);
+    }
+    free(rl->items);
+}
+
 size_t roomlist_cols(void *data) {
     (void)data;
     return 1;

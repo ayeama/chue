@@ -10,6 +10,8 @@ typedef struct LightList {
     size_t count;
 } LightList;
 
+void lightlist_free(LightList *ll);
+
 size_t lightlist_cols(void *data);
 
 size_t lightlist_rows(void *data);

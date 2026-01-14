@@ -2,6 +2,14 @@
 #include <stdlib.h>
 
 #include <application/lightlist.h>
+#include <domain/light.h>
+
+void lightlist_free(LightList *ll) {
+    for (size_t i = 0; i < ll->count; i++) {
+        light_free(&ll->items[i]);
+    }
+    free(ll->items);
+}
 
 size_t lightlist_cols(void *data) {
     (void)data;
