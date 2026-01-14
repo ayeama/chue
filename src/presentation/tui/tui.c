@@ -411,6 +411,9 @@ void curl_response() {
                             i++;
                         }
 
+                        for (size_t i = 0; i < lightlist->count; i++) {
+                            free(lightlist->items[i].name);
+                        }
                         free(lightlist->items);
                         lightlist->items = nlights;
                         lightlist->count = count;
@@ -447,6 +450,9 @@ void curl_response() {
                             i++;
                         }
 
+                        for (size_t i = 0; i < roomlist->count; i++) {
+                            free(roomlist->items[i].name);
+                        }
                         free(roomlist->items);
                         roomlist->items = nrooms;
                         roomlist->count = count;
