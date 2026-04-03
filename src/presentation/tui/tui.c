@@ -727,7 +727,8 @@ void init() {
 }
 
 void end() {
-    free(((LightList *)t->data)->items); // TODO unknown type?
+    lightlist_free(lightlist);
+    roomlist_free(roomlist);
     
     tablebehavior_free(light);
     tablebehavior_free(room);
