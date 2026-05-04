@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <config/config.h>
 #include <presentation/tui/tui.h>
 
 #define VERSION "0.0.1"
@@ -26,6 +27,10 @@ int main(int argc, char *argv[]) {
             printf("unknown argument: %s\n", argv[i]);
             return 1;
         }
+    }
+
+    if (config_parse() != 0) {
+        return 1;
     }
 
     tui();
