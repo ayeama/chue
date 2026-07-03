@@ -103,20 +103,40 @@ void chue_controller_handle_input() {
 
     switch (ch) {
     case 'j':
-        if (controller.view->selected_row_index < 16) {
-            controller.view->selected_row_index += 1;
-        }
+        switch (controller.view->window_content_type) {
+        case VIEW_CONTENT_BRIDGES:
+            break;
+        case VIEW_CONTENT_ROOMS:
+            if (controller.view->selected_row_index < 16) {
+                controller.view->selected_row_index += 1;
+            }
+            break;
+        case VIEW_CONTENT_LIGHTS:
+            break;
+        };
         break;
     case 'k':
-        if (controller.view->selected_row_index > 0) {
-            controller.view->selected_row_index -= 1;
-        }
+        switch (controller.view->window_content_type) {
+        case VIEW_CONTENT_BRIDGES:
+            break;
+        case VIEW_CONTENT_ROOMS:
+            if (controller.view->selected_row_index > 0) {
+                controller.view->selected_row_index -= 1;
+            }
+            break;
+        case VIEW_CONTENT_LIGHTS:
+            break;
+        };
         break;
     case 'h':
-        controller.view->window_content_type = VIEW_CONTENT_ROOMS;
+        if (controller.view->window_content_type > 0) {
+            controller.view->window_content_type -= 1;
+        }
         break;
     case 'l':
-        controller.view->window_content_type = VIEW_CONTENT_LIGHTS;
+        if (controller.view->window_content_type < 2) {
+            controller.view->window_content_type += 1;
+        }
         break;
     case ' ':
         // TODO handle error
@@ -156,6 +176,8 @@ int main() {
             start = now;
 
             switch (controller.view->window_content_type) {
+            case VIEW_CONTENT_BRIDGES:
+                break;
             case VIEW_CONTENT_ROOMS:
                 hue_code_t hresult = hue_room_get_many(
                     &controller.view->bridges[0],

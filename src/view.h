@@ -9,6 +9,7 @@
 #include "hue.h"
 
 typedef enum {
+    VIEW_CONTENT_BRIDGES,
     VIEW_CONTENT_ROOMS,
     VIEW_CONTENT_LIGHTS,
 } view_content_t;
@@ -32,6 +33,7 @@ typedef struct {
 
     WINDOW *window_header;
     WINDOW *window_footer;
+    WINDOW *window_content_bridges;
     WINDOW *window_content_rooms;
     WINDOW *window_content_lights;
     view_content_t window_content_type;

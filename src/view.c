@@ -33,6 +33,57 @@ void render_footer(view_t *view) {
     wnoutrefresh(view->window_footer);
 }
 
+void render_content_bridges(view_t *view) {
+    werase(view->window_content_bridges);
+
+    int maxy = getmaxy(view->window_content_bridges);
+    int maxx = getmaxx(view->window_content_bridges);
+
+    int table_header_y = 1;
+    int table_header_x = 1;
+    int table_content_y = table_header_y + 1;
+    int table_content_x = table_header_x;
+
+    box(view->window_content_bridges, 0, 0);
+    char *title = " bridges(all)[1] ";
+    mvwaddstr(
+        view->window_content_bridges,
+        0,
+        ((maxx - strlen(title)) / 2),
+        title
+    );
+
+    mvwprintw(
+        view->window_content_bridges,
+        table_header_y,
+        table_header_x,
+        "%-*s %-*s",
+        HUE_BRIDGE_ID_LEN,
+        "ID",
+        HUE_NAME_LEN,
+        "NAME"
+    );
+
+    for (size_t i = 0; i < view->bridges_count; i++) {
+        if ((table_content_y + i) > (size_t)maxy) {
+            break;
+        }
+
+        mvwprintw(
+            view->window_content_bridges,
+            (table_content_y + i),
+            table_content_x,
+            "%-*s %-*s",
+            HUE_BRIDGE_ID_LEN,
+            view->bridges[i].id,
+            HUE_NAME_LEN,
+            view->bridges[i].name
+        );
+    }
+
+    wnoutrefresh(view->window_content_bridges);
+}
+
 void render_content_rooms(view_t *view) {
     werase(view->window_content_rooms);
 
@@ -126,6 +177,9 @@ void render_content_lights(view_t *view) {
 
 void render_content(view_t *view) {
     switch (view->window_content_type) {
+    case VIEW_CONTENT_BRIDGES:
+        render_content_bridges(view);
+        break;
     case VIEW_CONTENT_ROOMS:
         render_content_rooms(view);
         break;
@@ -225,6 +279,18 @@ void create_footer(view_t *view) {
     }
 }
 
+void create_content_bridges(view_t *view) {
+    int height = getmaxy(stdscr) - VIEW_HEADER_HEIGHT - VIEW_FOOTER_HEIGHT;
+    int width = getmaxx(stdscr);
+    int y = VIEW_HEADER_HEIGHT;
+    int x = 0;
+
+    view->window_content_bridges = newwin(height, width, y, x);
+    if (view->window_content_bridges == NULL) {
+        return; // TODO handle error
+    }
+}
+
 void create_content_rooms(view_t *view) {
     int height = getmaxy(stdscr) - VIEW_HEADER_HEIGHT - VIEW_FOOTER_HEIGHT;
     int width = getmaxx(stdscr);
@@ -250,6 +316,7 @@ void create_content_lights(view_t *view) {
 }
 
 void create_content(view_t *view) {
+    create_content_bridges(view);
     create_content_rooms(view);
     create_content_lights(view);
 }
@@ -311,6 +378,10 @@ void destroy_footer(view_t *view) {
     delwin(view->window_footer);
 }
 
+void destroy_content_bridges(view_t *view) {
+    delwin(view->window_content_bridges);
+}
+
 void destroy_content_rooms(view_t *view) {
     delwin(view->window_content_rooms);
 }
@@ -320,6 +391,7 @@ void destroy_content_lights(view_t *view) {
 }
 
 void destroy_content(view_t *view) {
+    destroy_content_bridges(view);
     destroy_content_rooms(view);
     destroy_content_lights(view);
 }
