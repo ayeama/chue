@@ -20,6 +20,8 @@ typedef struct {
     view_t *view;
     state_t state;
     config_t *config;
+
+    bool running;
 } chue_controller_t;
 
 static chue_controller_t controller;
@@ -69,6 +71,7 @@ int create() {
         .view = view,
         .state = CHUE_STATE_READY,
         .config = config,
+        .running = true,
     };
 
     hue_code_t hresult = hue_create();
@@ -90,63 +93,52 @@ int destroy() {
     return 0;
 }
 
-void quit() {
-    if (destroy() == 0) {
-        exit(0);
-    } else {
-        exit(1);
+void chue_controller_toggle_grouped_light(chue_controller_t *controller) {
+    hue_grouped_light_t *grouped_light;
+    if (!view_get_focused_grouped_light(controller->view, &grouped_light)) {
+        return;
     }
+    
+    // TODO handle error
+    hue_grouped_light_put_one(
+        &controller->view->bridges[0],
+        grouped_light
+    );
 }
 
-void chue_controller_handle_input() {
+void chue_controller_select(chue_controller_t *controller) {
+    switch (controller->view->window_content_type) {
+    case VIEW_CONTENT_BRIDGES:
+        break;
+    case VIEW_CONTENT_ROOMS:
+        chue_controller_toggle_grouped_light(controller);
+        break;
+    case VIEW_CONTENT_LIGHTS:
+        break;
+    };
+}
+
+void chue_controller_handle_input(chue_controller_t *controller) {
     int ch = getch();
 
     switch (ch) {
     case 'j':
-        switch (controller.view->window_content_type) {
-        case VIEW_CONTENT_BRIDGES:
-            break;
-        case VIEW_CONTENT_ROOMS:
-            if (controller.view->selected_row_index < 16) {
-                controller.view->selected_row_index += 1;
-            }
-            break;
-        case VIEW_CONTENT_LIGHTS:
-            break;
-        };
+        view_move_down(controller->view);
         break;
     case 'k':
-        switch (controller.view->window_content_type) {
-        case VIEW_CONTENT_BRIDGES:
-            break;
-        case VIEW_CONTENT_ROOMS:
-            if (controller.view->selected_row_index > 0) {
-                controller.view->selected_row_index -= 1;
-            }
-            break;
-        case VIEW_CONTENT_LIGHTS:
-            break;
-        };
+        view_move_up(controller->view);
         break;
     case 'h':
-        if (controller.view->window_content_type > 0) {
-            controller.view->window_content_type -= 1;
-        }
+        view_move_left(controller->view);
         break;
     case 'l':
-        if (controller.view->window_content_type < 2) {
-            controller.view->window_content_type += 1;
-        }
+        view_move_right(controller->view);
         break;
     case ' ':
-        // TODO handle error
-        hue_grouped_light_put_one(
-            &controller.view->bridges[0],
-            &controller.view->grouped_lights[controller.view->selected_row_grouped_light_index]
-        );
+        chue_controller_select(controller);
         break;
     case 'd':
-        controller.view->panel_visible = !controller.view->panel_visible;
+        view_toggle_panel(controller->view);
         // if ( && controller.config->bridges_count == 0) {
         //     // TODO handle error
         //     hue_discover(controller.view->bridges, &controller.view->bridges_count);
@@ -158,7 +150,8 @@ void chue_controller_handle_input() {
         // }
         break;
     case 'q':
-        quit();
+        controller->running = false;
+        break;
     }
 }
 
@@ -168,8 +161,8 @@ int main() {
     }
 
     time_t start = time(NULL);
-    while (true) {
-        chue_controller_handle_input();
+    while (controller.running) {
+        chue_controller_handle_input(&controller);
 
         time_t now = time(NULL);
         if (now >= (start + 1)) {
@@ -179,20 +172,20 @@ int main() {
             case VIEW_CONTENT_BRIDGES:
                 break;
             case VIEW_CONTENT_ROOMS:
-                hue_code_t hresult = hue_room_get_many(
+                hue_code_t result = hue_room_get_many(
                     &controller.view->bridges[0],
                     controller.view->rooms,
                     &controller.view->rooms_count
                 );
-                if (hresult != HUE_CODE_OK) {
+                if (result != HUE_CODE_OK) {
                     break;
                 }
-                hresult = hue_grouped_light_get_many(
+                result = hue_grouped_light_get_many(
                     &controller.view->bridges[0],
                     controller.view->grouped_lights,
                     &controller.view->grouped_lights_count
                 );
-                if (hresult != HUE_CODE_OK) {
+                if (result != HUE_CODE_OK) {
                     break;
                 }
                 break;
@@ -201,12 +194,16 @@ int main() {
             }
         }
 
-        hue_code_t hresult = hue_poll();
-        if (hresult != HUE_CODE_OK) {
+        hue_code_t result = hue_poll();
+        if (result != HUE_CODE_OK) {
             break;
         }
 
         view_render(controller.view);
+    }
+
+    if (destroy() != 0) {
+        return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;

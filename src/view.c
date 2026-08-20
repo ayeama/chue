@@ -12,6 +12,67 @@
 
 static view_t view;
 
+bool view_get_focused_grouped_light(view_t *view, hue_grouped_light_t **grouped_light) {
+    if (view->focused_row >= view->rooms_count) {
+        return false;
+    }
+
+    hue_room_t *room = &view->rooms[view->focused_row];
+
+    for (size_t i = 0; i < view->grouped_lights_count; i++) {
+        if (strcmp(room->id, view->grouped_lights[i].owner_id) == 0) {
+            *grouped_light = &view->grouped_lights[i];
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void view_move_up(view_t *view) {
+    switch (view->window_content_type) {
+    case VIEW_CONTENT_BRIDGES:
+        break;
+    case VIEW_CONTENT_ROOMS:
+        if (view->focused_row > 0) {
+            view->focused_row--;
+        }
+        break;
+    case VIEW_CONTENT_LIGHTS:
+        break;
+    };
+}
+
+void view_move_down(view_t *view) {
+    switch (view->window_content_type) {
+    case VIEW_CONTENT_BRIDGES:
+        break;
+    case VIEW_CONTENT_ROOMS:
+        if (view->rooms_count > 0 && (view->focused_row + 1) < view->rooms_count) {
+            view->focused_row++;
+        }
+        break;
+    case VIEW_CONTENT_LIGHTS:
+        break;
+    };
+}
+
+void view_move_right(view_t *view) {
+    if (view->window_content_type < 2) {
+        view->window_content_type += 1;
+    }
+}
+
+void view_move_left(view_t *view) {
+    if (view->window_content_type > 0) {
+        view->window_content_type -= 1;
+    }
+}
+
+void view_toggle_panel(view_t *view) {
+    view->panel_visible = !view->panel_visible;
+}
+
 void render_header(view_t *view) {
     werase(view->window_header);
 
@@ -119,39 +180,30 @@ void render_content_rooms(view_t *view) {
         if ((table_content_y + i) > (size_t)maxy) {
             break;
         }
+        
         for (size_t j = 0; j < view->grouped_lights_count; j++) {
             if (strcmp(view->rooms[i].id, view->grouped_lights[j].owner_id) != 0) {
                 continue;
             }
 
-            if (i == view->selected_row_index) {
-                view->selected_row_grouped_light_index = j;
+            if (i == view->focused_row) {
                 wattrset(view->window_content_rooms, A_REVERSE);
-                mvwprintw(
-                    view->window_content_rooms,
-                    (table_content_y + i),
-                    table_content_x,
-                    "%-*s %-5s %10.f",
-                    HUE_NAME_LEN,
-                    view->rooms[i].name,
-                    view->grouped_lights[j].on ? "on" : "off",
-                    (float)(view->grouped_lights[j].brightness / 100)
-                );
-                wattrset(view->window_content_rooms, A_NORMAL);
-            } else {
-                mvwprintw(
-                    view->window_content_rooms,
-                    (table_content_y + i),
-                    table_content_x,
-                    "%-*s %-5s %10.f",
-                    HUE_NAME_LEN,
-                    view->rooms[i].name,
-                    view->grouped_lights[j].on ? "on" : "off",
-                    (float)(view->grouped_lights[j].brightness / 100)
-                );
             }
 
-            break;
+            mvwprintw(
+                view->window_content_rooms,
+                table_content_y + i,
+                table_content_x,
+                "%-*s %-5s %10.f",
+                HUE_NAME_LEN,
+                view->rooms[i].name,
+                view->grouped_lights[j].on ? "on" : "off",
+                (float)(view->grouped_lights[j].brightness / 100)
+            );
+
+            if (i == view->focused_row) {
+                wattrset(view->window_content_rooms, A_NORMAL);
+            }
         }
     }
 
@@ -347,8 +399,7 @@ void create_panel(view_t *view) {
 
 view_t *view_create() {
     view = (view_t){0};
-    view.selected_row_index = 0;
-    view.selected_row_grouped_light_index = 0; // TODO horrible
+    view.focused_row = 0;
     
     view.window_content_type = VIEW_CONTENT_ROOMS;
 

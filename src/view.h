@@ -28,8 +28,7 @@ typedef struct {
     hue_grouped_light_t grouped_lights[16];
     size_t grouped_lights_count;
 
-    size_t selected_row_index;
-    size_t selected_row_grouped_light_index;
+    size_t focused_row;
 
     WINDOW *window_header;
     WINDOW *window_footer;
@@ -43,6 +42,14 @@ typedef struct {
     view_panel_t panel_type;
     bool panel_visible;
 } view_t;
+
+bool view_get_focused_grouped_light(view_t *view, hue_grouped_light_t **grouped_light);
+
+void view_move_up(view_t *view);
+void view_move_down(view_t *view);
+void view_move_right(view_t *view);
+void view_move_left(view_t *view);
+void view_toggle_panel(view_t *view);
 
 void view_render(view_t *view);
 view_t *view_create();
