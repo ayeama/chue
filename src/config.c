@@ -75,26 +75,34 @@ void config_deserialise(const char *json) {
         ) {
             continue;
         }
+
+        if (config.bridges_count >= sizeof(config.bridges) / sizeof(config.bridges[0])) {
+            break;
+        }
         
-        strncpy(
+        snprintf(
             config.bridges[config.bridges_count].id,
-            id->valuestring,
-            sizeof(config.bridges[config.bridges_count].id)
+            sizeof(config.bridges[config.bridges_count].id),
+            "%s",
+            id->valuestring
         );
-        strncpy(
+        snprintf(
             config.bridges[config.bridges_count].internal_ip_address,
-            internal_ip_address->valuestring,
-            sizeof(config.bridges[config.bridges_count].internal_ip_address)
+            sizeof(config.bridges[config.bridges_count].internal_ip_address),
+            "%s",
+            internal_ip_address->valuestring
         );
-        strncpy(
+        snprintf(
             config.bridges[config.bridges_count].name,
-            name->valuestring,
-            sizeof(config.bridges[config.bridges_count].name)
+            sizeof(config.bridges[config.bridges_count].name),
+            "%s",
+            name->valuestring
         );
-        strncpy(
+        snprintf(
             config.bridges[config.bridges_count].key,
-            key->valuestring,
-            sizeof(config.bridges[config.bridges_count].key)
+            sizeof(config.bridges[config.bridges_count].key),
+            "%s",
+            key->valuestring
         );
 
         config.bridges[config.bridges_count].port = port->valueint;
@@ -115,9 +123,7 @@ config_t *config_read() {
     FILE *file = fopen(path, "r");
     if (file == NULL) {
         config = (config_t){0};
-
         config_write(&config);
-
         return &config;
     }
 
@@ -125,8 +131,9 @@ config_t *config_read() {
     long size = ftell(file);
     rewind(file);
 
-    if (size < 0) {
+    if (size < 0 || size >= CONFIG_JSON_LEN) {
         fprintf(stderr, "error getting config file size\n");
+        fclose(file);
         return NULL;
     }
 
@@ -145,17 +152,17 @@ void config_write(config_t *config) {
     const char *path = config_path();
     if (path == NULL) {
         fprintf(stderr, "error getting config path\n");
-        // return NULL; // TODO handle error
+        return; // TODO handle error
     }
 
     FILE* file = fopen(path, "w");
     if (file == NULL) {
         fprintf(stderr, "error opening config for writing\n");
-        // return NULL;
-        // TODO handle error
+        return; // TODO handle error
     }
 
     char json[CONFIG_JSON_LEN] = {0}; 
     config_serialise(json, sizeof(json));
     fputs(json, file);
+    fclose(file);
 }

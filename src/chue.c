@@ -104,6 +104,9 @@ void chue_controller_toggle_grouped_light(chue_controller_t *controller) {
         &controller->view->bridges[0],
         grouped_light
     );
+
+    // optimistic updating
+    grouped_light->on = !grouped_light->on;
 }
 
 void chue_controller_select(chue_controller_t *controller) {
