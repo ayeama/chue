@@ -22,6 +22,7 @@ typedef struct {
     config_t *config;
 
     bool running;
+    uint8_t interval;
 } chue_controller_t;
 
 static chue_controller_t controller;
@@ -72,6 +73,7 @@ int create() {
         .state = CHUE_STATE_READY,
         .config = config,
         .running = true,
+        .interval = 1,
     };
 
     hue_code_t hresult = hue_create();
@@ -163,12 +165,12 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    time_t start = time(NULL);
+    time_t start = time(NULL) - controller.interval;
     while (controller.running) {
         chue_controller_handle_input(&controller);
 
         time_t now = time(NULL);
-        if (now >= (start + 1)) {
+        if (now >= (start + controller.interval)) {
             start = now;
 
             switch (controller.view->window_content_type) {
