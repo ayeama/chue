@@ -11,6 +11,7 @@ typedef enum {
     CURL_REQUEST_ROOM_GET_MANY,
     CURL_REQUEST_GROUPED_LIGHT_GET_MANY,
     CURL_REQUEST_GROUPED_LIGHT_PUT_ONE,
+    CURL_REQUEST_GROUPED_LIGHT_PUT_ONE_BRIGHTNESS,
     CURL_REQUEST_DISCOVER,
     CURL_REQUEST_CONFIG_GET_ONE,
 } curl_request_t;
@@ -174,7 +175,7 @@ hue_code_t grouped_light_get_many_deserialise(char *json, size_t size, hue_group
                     owner_type->valuestring
                 );
 
-                dest->brightness = (uint16_t)(brightness->valuedouble * 100);
+                dest->brightness = brightness->valuedouble;
                 dest->on = cJSON_IsTrue(on);
 
                 (*grouped_lights_count) += 1;
@@ -417,6 +418,70 @@ hue_code_t hue_grouped_light_put_one(hue_bridge_t *bridge, hue_grouped_light_t *
     return HUE_CODE_OK;
 }
 
+hue_code_t hue_grouped_light_put_one_brightness(hue_bridge_t *bridge, hue_grouped_light_t *grouped_light, double brightness) {
+    curl_request_context_t *context = calloc(1, sizeof(curl_request_context_t));
+    if (context == NULL) {
+        return HUE_CODE_ERROR;
+    }
+
+    curl_handle_t *handle = calloc(1, sizeof(curl_handle_t));
+    if (handle == NULL) {
+        return HUE_CODE_ERROR;
+    }
+
+    CURL *curl = curl_easy_init();
+    if (curl == NULL) {
+        return HUE_CODE_ERROR;
+    }
+
+    handle->curl = curl;
+
+    char key_header[62] = {0};
+    snprintf(key_header, sizeof(key_header), "hue-application-key: %s", bridge->key);
+    handle->headers = curl_slist_append(handle->headers, key_header);
+    
+    handle->response = (curl_response_t){0};
+    
+    context->handle = handle;
+    context->request = CURL_REQUEST_GROUPED_LIGHT_PUT_ONE;
+
+    curl_easy_setopt(context->handle->curl, CURLOPT_PRIVATE, context);
+    curl_easy_setopt(context->handle->curl, CURLOPT_WRITEFUNCTION, callback);
+    curl_easy_setopt(context->handle->curl, CURLOPT_WRITEDATA, &context->handle->response);
+
+    char url[92];
+    snprintf(
+        url,
+        sizeof(url),
+        "https://%s/clip/v2/resource/grouped_light/%s",
+        bridge->internal_ip_address,
+        grouped_light->id
+    );
+
+    curl_easy_setopt(context->handle->curl, CURLOPT_URL, url);
+    curl_easy_setopt(context->handle->curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(context->handle->curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(context->handle->curl, CURLOPT_HTTPHEADER, context->handle->headers);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *dimming = cJSON_CreateObject();
+    cJSON *dimming_inner = cJSON_CreateNumber(brightness);
+    cJSON_AddItemToObject(dimming, "brightness", dimming_inner);
+    cJSON_AddItemToObject(root, "dimming", dimming);
+    context->body = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    curl_easy_setopt(context->handle->curl, CURLOPT_POSTFIELDS, context->body);
+    curl_easy_setopt(context->handle->curl, CURLOPT_CUSTOMREQUEST, "PUT");
+
+    CURLMcode cmresult = curl_multi_add_handle(curl_multi, context->handle->curl);
+    if (cmresult != CURLM_OK) {
+        return HUE_CODE_ERROR;
+    }
+
+    return HUE_CODE_OK;
+}
+
 hue_code_t hue_discover(hue_bridge_t *bridges, size_t *bridges_count) {
     curl_request_context_t *context = calloc(1, sizeof(curl_request_context_t));
     if (context == NULL) {
@@ -546,6 +611,8 @@ hue_code_t curl_dispatch() {
             break;
         case CURL_REQUEST_GROUPED_LIGHT_PUT_ONE:
             break;
+        case CURL_REQUEST_GROUPED_LIGHT_PUT_ONE_BRIGHTNESS:
+            break;
         case CURL_REQUEST_DISCOVER:
             if (context->handle->response.status_code == 429) {
                 break;
@@ -563,6 +630,9 @@ hue_code_t curl_dispatch() {
                 context->handle->response.size,
                 context->config_get_one.bridge
             );
+            break;
+        default:
+            // TODO error?
             break;
         }
 

@@ -95,6 +95,32 @@ int destroy() {
     return 0;
 }
 
+void chue_controller_handle_brightness(chue_controller_t *controller, double brightness_delta) {    
+    // TODO add rate limiting
+    
+    hue_grouped_light_t *grouped_light;
+    if (!view_get_focused_grouped_light(controller->view, &grouped_light)) {
+        return;
+    }
+
+    double brightness = grouped_light->brightness + brightness_delta;
+    if (brightness < 0.0) {
+        brightness = 0.0;
+    } else if (brightness > 100.0) {
+        brightness = 100.0;
+    }
+
+    // TODO handle error
+    hue_grouped_light_put_one_brightness(
+        &controller->view->bridges[0],
+        grouped_light,
+        brightness
+    );
+
+    // optimistic updating
+    grouped_light->brightness = brightness;
+}
+
 void chue_controller_toggle_grouped_light(chue_controller_t *controller) {
     hue_grouped_light_t *grouped_light;
     if (!view_get_focused_grouped_light(controller->view, &grouped_light)) {
@@ -112,6 +138,8 @@ void chue_controller_toggle_grouped_light(chue_controller_t *controller) {
 }
 
 void chue_controller_select(chue_controller_t *controller) {
+    // TODO add rate limiting
+
     switch (controller->view->window_content_type) {
     case VIEW_CONTENT_BRIDGES:
         break;
@@ -138,6 +166,12 @@ void chue_controller_handle_input(chue_controller_t *controller) {
         break;
     case 'l':
         view_move_right(controller->view);
+        break;
+    case 'H':
+        chue_controller_handle_brightness(controller, -10.0);
+        break;
+    case 'L':
+        chue_controller_handle_brightness(controller, 10.0);
         break;
     case ' ':
         chue_controller_select(controller);

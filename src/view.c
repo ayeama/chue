@@ -194,11 +194,11 @@ void render_content_rooms(view_t *view) {
                 view->window_content_rooms,
                 table_content_y + i,
                 table_content_x,
-                "%-*s %-5s %10.f",
+                "%-*s %-5s %10.lf",
                 HUE_NAME_LEN,
                 view->rooms[i].name,
                 view->grouped_lights[j].on ? "on" : "off",
-                (float)(view->grouped_lights[j].brightness / 100)
+                view->grouped_lights[j].brightness
             );
 
             if (i == view->focused_row) {

@@ -25,7 +25,7 @@ typedef struct {
     char id[HUE_ID_SIZE];
     char owner_id[HUE_ID_SIZE];
     char owner_type[HUE_NAME_SIZE];
-    uint16_t brightness;
+    double brightness;
     bool on;
 } hue_grouped_light_t;
 
@@ -46,6 +46,7 @@ typedef enum {
 hue_code_t hue_room_get_many(hue_bridge_t *bridge, hue_room_t *rooms, size_t *rooms_count);
 hue_code_t hue_grouped_light_get_many(hue_bridge_t *bridge, hue_grouped_light_t *grouped_lights, size_t *grouped_lights_count);
 hue_code_t hue_grouped_light_put_one(hue_bridge_t *bridge, hue_grouped_light_t *grouped_light);
+hue_code_t hue_grouped_light_put_one_brightness(hue_bridge_t *bridge, hue_grouped_light_t *grouped_light, double brightness);
 hue_code_t hue_discover(hue_bridge_t *bridges, size_t *bridges_count);
 hue_code_t hue_config_get_one(hue_bridge_t *bridge);
 hue_code_t hue_poll();
