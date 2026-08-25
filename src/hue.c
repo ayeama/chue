@@ -514,7 +514,7 @@ hue_code_t hue_grouped_light_put_one_brightness(hue_bridge_t *bridge, hue_groupe
     handle->response = (curl_response_t){0};
     
     context->handle = handle;
-    context->request = CURL_REQUEST_GROUPED_LIGHT_PUT_ONE;
+    context->request = CURL_REQUEST_GROUPED_LIGHT_PUT_ONE_BRIGHTNESS;
 
     curl_easy_setopt(context->handle->curl, CURLOPT_PRIVATE, context);
     curl_easy_setopt(context->handle->curl, CURLOPT_WRITEFUNCTION, callback);
@@ -632,8 +632,6 @@ hue_code_t hue_discover(hue_bridge_t *bridges, size_t *bridges_count) {
     curl_easy_setopt(context->handle->curl, CURLOPT_WRITEDATA, &context->handle->response);
 
     curl_easy_setopt(context->handle->curl, CURLOPT_URL, "https://discovery.meethue.com");
-    curl_easy_setopt(context->handle->curl, CURLOPT_SSL_VERIFYHOST, 0L);
-    curl_easy_setopt(context->handle->curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(context->handle->curl, CURLOPT_HTTPHEADER, context->handle->headers);
 
     CURLMcode cmresult = curl_multi_add_handle(curl_multi, context->handle->curl);
@@ -688,6 +686,24 @@ hue_code_t hue_config_get_one(hue_bridge_t *bridge) {
     return HUE_CODE_OK;
 }
 
+void curl_dispatch_cleanup(CURL *curl, curl_request_context_t *context) {
+    curl_multi_remove_handle(curl_multi, curl);
+    curl_easy_cleanup(curl);
+
+    if (context == NULL) {
+        return;
+    }
+
+    if (context->handle != NULL) {
+        curl_slist_free_all(context->handle->headers);
+        free(context->handle->response.data);
+        free(context->handle);
+    }
+
+    free(context->body);
+    free(context);
+}
+
 hue_code_t curl_dispatch() {
     CURLMsg *msg;
     int msgs_left;
@@ -700,15 +716,18 @@ hue_code_t curl_dispatch() {
         curl_request_context_t *context;
         CURLcode cresult = curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &context);
         if (cresult != CURLE_OK) {
+            curl_dispatch_cleanup(msg->easy_handle, context);
             continue;
         }
         
-        if (context->handle == NULL) {
+        if (context == NULL || context->handle == NULL) {
+            curl_dispatch_cleanup(msg->easy_handle, context);
             continue;
         }
 
         cresult = curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &context->handle->response.status_code);
         if (cresult != CURLE_OK) {
+            curl_dispatch_cleanup(msg->easy_handle, context);
             continue;
         }
 
@@ -764,18 +783,7 @@ hue_code_t curl_dispatch() {
             break;
         }
 
-        curl_multi_remove_handle(curl_multi, context->handle->curl);
-        curl_slist_free_all(context->handle->headers);
-        context->handle->headers = NULL;
-        free(context->handle->response.data);
-        context->handle->response.data = NULL;
-        context->handle->response.size = 0;
-        curl_easy_cleanup(context->handle->curl);
-        free(context->handle);
-        if (context->body != NULL) {
-            free(context->body);
-        }
-        free(context);
+        curl_dispatch_cleanup(msg->easy_handle, context);
     }
 
     return HUE_CODE_OK;

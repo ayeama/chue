@@ -6,11 +6,11 @@
 #include <hue.h>
 
 typedef struct {
-    hue_bridge_t bridges[4];
+    hue_bridge_t bridges[HUE_MAX_BRIDGES];
     size_t bridges_count;
 } config_t;
 
 config_t *config_read();
-void config_write(config_t *config);
+void config_write();
 
 #endif // CONFIG_H

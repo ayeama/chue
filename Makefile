@@ -7,6 +7,8 @@ TARGET = $(BUILD)/chue
 
 SRC = src/chue.c src/config.c src/hue.c src/view.c
 
+.PHONY: all install clean run
+
 all:
 	mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC) $(LDFLAGS)

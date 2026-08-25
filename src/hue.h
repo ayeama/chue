@@ -5,6 +5,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define HUE_MAX_BRIDGES 4
+#define HUE_MAX_ROOMS 16
+#define HUE_MAX_GROUPED_LIGHTS 16
+#define HUE_MAX_LIGHTS 16
+
 #define HUE_ID_LEN 36
 #define HUE_ID_SIZE (HUE_ID_LEN + 1)
 #define HUE_NAME_LEN 32

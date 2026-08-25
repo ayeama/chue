@@ -105,8 +105,12 @@ void render_content_bridges(view_t *view) {
     int table_content_y = table_header_y + 1;
     int table_content_x = table_header_x;
 
+    int table_title_padding = 4;
+    int table_title_maxx = maxx - table_title_padding;
+
     box(view->window_content_bridges, 0, 0);
-    char *title = " bridges(all)[1] ";
+    char title[table_title_maxx];
+    snprintf(title, sizeof(title), " bridges(all)[%zu] ", view->bridges_count);
     mvwaddstr(
         view->window_content_bridges,
         0,
@@ -126,7 +130,7 @@ void render_content_bridges(view_t *view) {
     );
 
     for (size_t i = 0; i < view->bridges_count; i++) {
-        if ((table_content_y + i) > (size_t)maxy) {
+        if ((table_content_y + i) >= (size_t)maxy) {
             break;
         }
 
@@ -156,8 +160,12 @@ void render_content_rooms(view_t *view) {
     int table_content_y = table_header_y + 1;
     int table_content_x = table_header_x;
 
+    int table_title_padding = 4;
+    int table_title_maxx = maxx - table_title_padding;
+
     box(view->window_content_rooms, 0, 0);
-    char *title = " rooms(all)[6] ";
+    char title[table_title_maxx];
+    snprintf(title, sizeof(title), " rooms(all)[%zu] ", view->rooms_count);
     mvwaddstr(
         view->window_content_rooms,
         0,
@@ -177,7 +185,7 @@ void render_content_rooms(view_t *view) {
     );
 
     for (size_t i = 0; i < view->rooms_count; i++) {
-        if ((table_content_y + i) > (size_t)maxy) {
+        if ((table_content_y + i) >= (size_t)maxy) {
             break;
         }
         
@@ -221,8 +229,12 @@ void render_content_lights(view_t *view) {
     int table_content_y = table_header_y + 1;
     int table_content_x = table_header_x;
 
+    int table_title_padding = 4;
+    int table_title_maxx = maxx - table_title_padding;
+
     box(view->window_content_lights, 0, 0);
-    char *title = " lights(all)[0] ";
+    char title[table_title_maxx];
+    snprintf(title, sizeof(title), " lights(all)[%zu] ", view->lights_count);
     mvwaddstr(
         view->window_content_lights,
         0,
@@ -242,7 +254,7 @@ void render_content_lights(view_t *view) {
     );
 
     for (size_t i = 0; i < view->lights_count; i++) {
-        if ((table_content_y + i) > (size_t)maxy) {
+        if ((table_content_y + i) >= (size_t)maxy) {
             break;
         }
 
@@ -304,7 +316,7 @@ void render_panel_discover(view_t *view) {
     );
 
     for (size_t i = 0; i < view->bridges_count; i++) {
-        if ((1 + i) > (size_t)maxy) {
+        if ((1 + i) >= (size_t)maxy) {
             break;
         }
 

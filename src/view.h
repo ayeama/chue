@@ -19,16 +19,16 @@ typedef enum {
 } view_panel_t;
 
 typedef struct {
-    hue_bridge_t bridges[4];
+    hue_bridge_t bridges[HUE_MAX_BRIDGES];
     size_t bridges_count;
 
-    hue_room_t rooms[16];
+    hue_room_t rooms[HUE_MAX_ROOMS];
     size_t rooms_count;
 
-    hue_grouped_light_t grouped_lights[16];
+    hue_grouped_light_t grouped_lights[HUE_MAX_GROUPED_LIGHTS];
     size_t grouped_lights_count;
 
-    hue_light_t lights[16];
+    hue_light_t lights[HUE_MAX_LIGHTS];
     size_t lights_count;
 
     size_t focused_row;

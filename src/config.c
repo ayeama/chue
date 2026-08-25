@@ -146,9 +146,7 @@ config_t *config_read() {
     return &config;
 }
 
-void config_write(config_t *config) {
-    (void)config; // TODO use config
-
+void config_write() {
     const char *path = config_path();
     if (path == NULL) {
         fprintf(stderr, "error getting config path\n");
