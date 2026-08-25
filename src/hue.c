@@ -99,7 +99,7 @@ hue_code_t room_get_many_deserialise(char *json, size_t size, hue_room_t *rooms,
             }
 
             // TODO, figure out sizes
-            if ((*rooms_count) < 16) {
+            if ((*rooms_count) < HUE_MAX_ROOMS) {
                 hue_room_t *dest = &rooms[*rooms_count];
 
                 snprintf(
@@ -159,7 +159,7 @@ hue_code_t grouped_light_get_many_deserialise(char *json, size_t size, hue_group
             }
 
             // TODO, figure out sizes
-            if ((*grouped_lights_count) < 16) {
+            if ((*grouped_lights_count) < HUE_MAX_GROUPED_LIGHTS) {
                 hue_grouped_light_t *dest = &grouped_lights[*grouped_lights_count];
 
                 snprintf(
@@ -224,7 +224,7 @@ hue_code_t light_get_many_deserialise(char *json, size_t size, hue_light_t *ligh
             }
 
             // TODO, figure out sizes
-            if ((*lights_count) < 16) {
+            if ((*lights_count) < HUE_MAX_LIGHTS) {
                 hue_light_t *dest = &lights[*lights_count];
 
                 snprintf(
@@ -278,7 +278,7 @@ hue_code_t discover_deserialise(char *json, size_t size, hue_bridge_t *bridges, 
                 continue;
             }
 
-            if ((*bridges_count) < 4) {
+            if ((*bridges_count) < HUE_MAX_BRIDGES) {
                 hue_bridge_t *dest = &bridges[*bridges_count];
                 
                 snprintf(
@@ -713,7 +713,7 @@ hue_code_t curl_dispatch() {
             continue;
         }
 
-        curl_request_context_t *context;
+        curl_request_context_t *context = NULL;
         CURLcode cresult = curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &context);
         if (cresult != CURLE_OK) {
             curl_dispatch_cleanup(msg->easy_handle, context);

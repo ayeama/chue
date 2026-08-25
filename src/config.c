@@ -123,7 +123,7 @@ config_t *config_read() {
     FILE *file = fopen(path, "r");
     if (file == NULL) {
         config = (config_t){0};
-        config_write(&config);
+        config_write();
         return &config;
     }
 
