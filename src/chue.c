@@ -229,6 +229,14 @@ int main() {
                 }
                 break;
             case VIEW_CONTENT_LIGHTS:
+                result = hue_light_get_many(
+                    &controller.view->bridges[0],
+                    controller.view->lights,
+                    &controller.view->lights_count
+                );
+                if (result != HUE_CODE_OK) {
+                    break;
+                }
                 break;
             }
         }

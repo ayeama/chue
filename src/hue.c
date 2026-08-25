@@ -12,6 +12,7 @@ typedef enum {
     CURL_REQUEST_GROUPED_LIGHT_GET_MANY,
     CURL_REQUEST_GROUPED_LIGHT_PUT_ONE,
     CURL_REQUEST_GROUPED_LIGHT_PUT_ONE_BRIGHTNESS,
+    CURL_REQUEST_LIGHT_GET_MANY,
     CURL_REQUEST_DISCOVER,
     CURL_REQUEST_CONFIG_GET_ONE,
 } curl_request_t;
@@ -43,6 +44,11 @@ typedef struct {
             hue_grouped_light_t *grouped_lights;
             size_t *grouped_lights_count;
         } grouped_light_get_many;
+
+        struct {
+            hue_light_t *lights;
+            size_t *lights_count;
+        } light_get_many;
 
         struct {
             hue_bridge_t *bridges;
@@ -179,6 +185,71 @@ hue_code_t grouped_light_get_many_deserialise(char *json, size_t size, hue_group
                 dest->on = cJSON_IsTrue(on);
 
                 (*grouped_lights_count) += 1;
+            }
+        }
+    }
+
+    cJSON_Delete(root);
+
+    return HUE_CODE_OK;
+}
+
+hue_code_t light_get_many_deserialise(char *json, size_t size, hue_light_t *lights, size_t *lights_count) {
+    *lights_count = 0;
+
+    cJSON *root = cJSON_ParseWithLength(json, size);
+    if (root != NULL) {
+        cJSON *data = cJSON_GetObjectItem(root, "data");
+    
+        cJSON *light;
+        cJSON_ArrayForEach(light, data) {
+            cJSON *id = cJSON_GetObjectItem(light, "id");
+
+            cJSON *metadata = cJSON_GetObjectItem(light, "metadata");
+            cJSON *name = cJSON_GetObjectItem(metadata, "name");
+            cJSON *archetype = cJSON_GetObjectItem(metadata, "archetype");
+
+            if (!cJSON_IsString(name) || !cJSON_IsString(archetype)) {
+                continue;
+            }
+
+            cJSON *on_object = cJSON_GetObjectItem(light, "on");
+            cJSON *on = cJSON_GetObjectItem(on_object, "on");
+
+            cJSON *dimming = cJSON_GetObjectItem(light, "dimming");
+            cJSON *brightness = cJSON_GetObjectItem(dimming, "brightness");
+
+            if (!cJSON_IsBool(on) || !cJSON_IsNumber(brightness)) {
+                continue;
+            }
+
+            // TODO, figure out sizes
+            if ((*lights_count) < 16) {
+                hue_light_t *dest = &lights[*lights_count];
+
+                snprintf(
+                    dest->id,
+                    sizeof(dest->id),
+                    "%s",
+                    id->valuestring
+                );
+                snprintf(
+                    dest->name,
+                    sizeof(dest->name),
+                    "%s",
+                    name->valuestring
+                );
+                snprintf(
+                    dest->archetype,
+                    sizeof(dest->archetype),
+                    "%s",
+                    archetype->valuestring
+                );
+
+                dest->brightness = brightness->valuedouble;
+                dest->on = cJSON_IsTrue(on);
+
+                (*lights_count) += 1;
             }
         }
     }
@@ -482,6 +553,55 @@ hue_code_t hue_grouped_light_put_one_brightness(hue_bridge_t *bridge, hue_groupe
     return HUE_CODE_OK;
 }
 
+hue_code_t hue_light_get_many(hue_bridge_t *bridge, hue_light_t *lights, size_t *lights_count) {
+    curl_request_context_t *context = calloc(1, sizeof(curl_request_context_t));
+    if (context == NULL) {
+        return HUE_CODE_ERROR;
+    }
+
+    curl_handle_t *handle = calloc(1, sizeof(curl_handle_t));
+    if (handle == NULL) {
+        return HUE_CODE_ERROR;
+    }
+
+    CURL *curl = curl_easy_init();
+    if (curl == NULL) {
+        return HUE_CODE_ERROR;
+    }
+
+    handle->curl = curl;
+
+    char key_header[62] = {0};
+    snprintf(key_header, sizeof(key_header), "hue-application-key: %s", bridge->key);
+    handle->headers = curl_slist_append(handle->headers, key_header);
+    
+    handle->response = (curl_response_t){0};
+    
+    context->handle = handle;
+    context->request = CURL_REQUEST_LIGHT_GET_MANY;
+    context->light_get_many.lights = lights;
+    context->light_get_many.lights_count = lights_count;
+
+    curl_easy_setopt(context->handle->curl, CURLOPT_PRIVATE, context);
+    curl_easy_setopt(context->handle->curl, CURLOPT_WRITEFUNCTION, callback);
+    curl_easy_setopt(context->handle->curl, CURLOPT_WRITEDATA, &context->handle->response);
+
+    char url[55];
+    snprintf(url, sizeof(url), "https://%s/clip/v2/resource/light", bridge->internal_ip_address);
+
+    curl_easy_setopt(context->handle->curl, CURLOPT_URL, url);
+    curl_easy_setopt(context->handle->curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(context->handle->curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(context->handle->curl, CURLOPT_HTTPHEADER, context->handle->headers);
+
+    CURLMcode cmresult = curl_multi_add_handle(curl_multi, context->handle->curl);
+    if (cmresult != CURLM_OK) {
+        return HUE_CODE_ERROR;
+    }
+
+    return HUE_CODE_OK;
+}
+
 hue_code_t hue_discover(hue_bridge_t *bridges, size_t *bridges_count) {
     curl_request_context_t *context = calloc(1, sizeof(curl_request_context_t));
     if (context == NULL) {
@@ -612,6 +732,14 @@ hue_code_t curl_dispatch() {
         case CURL_REQUEST_GROUPED_LIGHT_PUT_ONE:
             break;
         case CURL_REQUEST_GROUPED_LIGHT_PUT_ONE_BRIGHTNESS:
+            break;
+        case CURL_REQUEST_LIGHT_GET_MANY:
+            light_get_many_deserialise(
+                context->handle->response.data,
+                context->handle->response.size,
+                context->light_get_many.lights,
+                context->light_get_many.lights_count
+            );
             break;
         case CURL_REQUEST_DISCOVER:
             if (context->handle->response.status_code == 429) {

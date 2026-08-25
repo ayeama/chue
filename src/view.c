@@ -213,7 +213,13 @@ void render_content_rooms(view_t *view) {
 void render_content_lights(view_t *view) {
     werase(view->window_content_lights);
 
-    int maxx = getmaxx(stdscr);
+    int maxy = getmaxy(view->window_content_lights);
+    int maxx = getmaxx(view->window_content_lights);
+
+    int table_header_y = 1;
+    int table_header_x = 1;
+    int table_content_y = table_header_y + 1;
+    int table_content_x = table_header_x;
 
     box(view->window_content_lights, 0, 0);
     char *title = " lights(all)[0] ";
@@ -223,6 +229,34 @@ void render_content_lights(view_t *view) {
         ((maxx - strlen(title)) / 2),
         title
     );
+
+    mvwprintw(
+        view->window_content_lights,
+        table_header_y,
+        table_header_y,
+        "%-*s %-*s",
+        HUE_ID_LEN,
+        "ID",
+        HUE_NAME_LEN,
+        "NAME"
+    );
+
+    for (size_t i = 0; i < view->lights_count; i++) {
+        if ((table_content_y + i) > (size_t)maxy) {
+            break;
+        }
+
+        mvwprintw(
+            view->window_content_lights,
+            (table_content_y + i),
+            table_content_x,
+            "%-*s %-*s",
+            HUE_ID_LEN,
+            view->lights[i].id,
+            HUE_NAME_LEN,
+            view->lights[i].name
+        );
+    }
 
     wnoutrefresh(view->window_content_lights);
 }

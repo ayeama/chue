@@ -28,6 +28,9 @@ typedef struct {
     hue_grouped_light_t grouped_lights[16];
     size_t grouped_lights_count;
 
+    hue_light_t lights[16];
+    size_t lights_count;
+
     size_t focused_row;
 
     WINDOW *window_header;

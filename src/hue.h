@@ -17,6 +17,15 @@
 #define HUE_BRIDGE_KEY_SIZE (HUE_BRIDGE_KEY_LEN + 1)
 
 typedef struct {
+    char id[HUE_BRIDGE_ID_SIZE];
+    char internal_ip_address[HUE_BRIDGE_INTERNAL_IP_SIZE];
+    uint16_t port;
+
+    char name[HUE_NAME_SIZE];
+    char key[HUE_BRIDGE_KEY_SIZE];
+} hue_bridge_t;
+
+typedef struct {
     char id[HUE_ID_SIZE];
     char name[HUE_NAME_SIZE];
 } hue_room_t;
@@ -30,13 +39,12 @@ typedef struct {
 } hue_grouped_light_t;
 
 typedef struct {
-    char id[HUE_BRIDGE_ID_SIZE];
-    char internal_ip_address[HUE_BRIDGE_INTERNAL_IP_SIZE];
-    uint16_t port;
-
+    char id[HUE_ID_SIZE];
     char name[HUE_NAME_SIZE];
-    char key[HUE_BRIDGE_KEY_SIZE];
-} hue_bridge_t;
+    char archetype[33]; // TODO magic number
+    double brightness;
+    bool on;
+} hue_light_t;
 
 typedef enum {
     HUE_CODE_OK = 0,
@@ -47,6 +55,7 @@ hue_code_t hue_room_get_many(hue_bridge_t *bridge, hue_room_t *rooms, size_t *ro
 hue_code_t hue_grouped_light_get_many(hue_bridge_t *bridge, hue_grouped_light_t *grouped_lights, size_t *grouped_lights_count);
 hue_code_t hue_grouped_light_put_one(hue_bridge_t *bridge, hue_grouped_light_t *grouped_light);
 hue_code_t hue_grouped_light_put_one_brightness(hue_bridge_t *bridge, hue_grouped_light_t *grouped_light, double brightness);
+hue_code_t hue_light_get_many(hue_bridge_t *bridge, hue_light_t *lights, size_t *lights_count);
 hue_code_t hue_discover(hue_bridge_t *bridges, size_t *bridges_count);
 hue_code_t hue_config_get_one(hue_bridge_t *bridge);
 hue_code_t hue_poll();
